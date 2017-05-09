@@ -1,8 +1,9 @@
 'use strict';
 
 var CARD_SIZE = 200;
-var BORDER_WIDTH = 6;
+var BORDER_WIDTH = 2;
 var INNER_BORDER_WIDTH = 2;
+var ZONE_WIDTH = CARD_SIZE / 2 - BORDER_WIDTH / 2 - INNER_BORDER_WIDTH / 2;
 var BORDER_COLOR = '#547062';
 var HUT_COLOR = '#5182ad';
 var HUT_SIZE = CARD_SIZE * 0.1;
@@ -11,18 +12,10 @@ var canvas;
 var ctx;
 
 
-// Rotation stuff for huts:
-// zone_info[(4 - rot) % 4 + 1]
-// zone_info[(5 - rot) % 4 + 1]
-// zone_info[(6 - rot) % 4 + 1]
-// zone_info[(7 - rot) % 4 + 1]
-
 window.addEventListener('load', function(){
 	canvas = document.getElementById('canvas');
 	ctx = canvas.getContext('2d');
 	//ctx.translate(0.5, 0.5);
-	//drawCard(1, 0, 20, 40);
-	//drawCard(1, 3, 20, CARD_SIZE + 100);
 
 
 	var allCards = {
@@ -122,8 +115,7 @@ function parseMap(map) {
 	// First collect all towers, which are a territory on their own
 	for (let coords of Object.keys(zoneGrid)) {
 		if (zoneGrid[coords][0] == 'T') {
-			territories.push(new Territory(territories.length, coords));
-			console.log(`New tower territory ${coords}`);
+			territories.push(new Territory(territories.length, coords, 'T'));
 		} else {
 			unscanned_coords.add(coords);
 		}
@@ -132,27 +124,42 @@ function parseMap(map) {
 
 	while (unscanned_coords.size) {
 		let coords = unscanned_coords.keys().next().value;
-		let coord_type = zoneGrid[coords][0];
 		unscanned_coords.delete(coords);
-		let current_territory = new Territory(territories.length, coords);
-		territories.push(current_territory);
-		for (let neighbor of getNeighbors(coords)) {
-			if (unscanned_coords.has(neighbor)) {
-				if (zoneGrid[neighbor][0] == coord_type) {
-					current_territory.coords.add(neighbor);
+		let territory = new Territory(territories.length, coords, zoneGrid[coords][0]);
+		territories.push(territory);
+
+		// Explore the new territory
+		var coords_to_explore = new Set([coords]);
+		while (coords_to_explore.size) {
+			let coords = coords_to_explore.keys().next().value;
+			coords_to_explore.delete(coords);
+			for (let [neighbor, direction] of getNeighbors(coords)) {
+				if (unscanned_coords.has(neighbor) && zoneGrid[neighbor][0] == territory.type) {
+					territory.coords.add(neighbor);
 					unscanned_coords.delete(neighbor);
-				} else {
-					current_territory.neighbors.add(neighbor);
+					coords_to_explore.add(neighbor);
+				} else if (zoneGrid[neighbor]) {
+					territory.neighbors.add(neighbor);
+
+					// Count hut
+					if (territory.type == 'W' && zoneGrid[neighbor][1 + Math.abs(direction + 2) % 4]) {
+						territory.huts += 1;
+					}
+
+					// TODO: Mark the border position
 				}
-			} else if (zoneGrid[neighbor]) {
-				current_territory.neighbors.add(neighbor);
 			}
 		}
 	}
 
 	for (let territory of territories) {
 		let coords = Array.from(territory.coords).join('  ');
-		console.log(`${territory.id}: { coords: ${coords} }`);
+		let r = Math.floor(Math.random() * 256);
+		let g = Math.floor(Math.random() * 256);
+		let b = Math.floor(Math.random() * 256);
+		let color = `rgba(${r},${g},${b},0.7`;
+		markCoords(territory.coords, color, territory.id);
+		console.log(`${territory.id}: { type: ${territory.type}, huts: ${territory.huts}, coords: ${coords} }`);
 	}
 
 	// TODO: Count huts around water territories
@@ -161,23 +168,35 @@ function parseMap(map) {
 
 }
 
-function* getNeighbors(coords) {
-	var [x, y] = str_to_coords(coords);
-	for (var i = -1; i <= 1; i++) {
-		for (var j = -1; j <= 1; j++) {
-			if (i == 0 && j == 0) {
-				continue
-			}
-			yield coord_to_str(x + i, y + j);
-		}
+function markCoords(coords_list, color, id) {
+	for (let coords of coords_list) {
+		let [zone_x, zone_y] = str_to_coords(coords);
+		//ctx.fillStyle = color;
+		//ctx.fillRect(20 + zone_x * ZONE_WIDTH + 5, 40 + zone_y * ZONE_WIDTH + 5, ZONE_WIDTH / 2, ZONE_WIDTH / 2);
+
+
+		ctx.font = "20px serif";
+		ctx.textBaseline = "hanging";
+		ctx.fillStyle = "black";
+		ctx.fillText(id.toString(), 30 + zone_x * ZONE_WIDTH + 5, 50 + zone_y * ZONE_WIDTH + 5);
 	}
 }
 
-function Territory(id, coord) {
+function* getNeighbors(coords) {
+	var [x, y] = str_to_coords(coords);
+	yield [coord_to_str(x, y - 1), 0];
+	yield [coord_to_str(x + 1, y), 1];
+	yield [coord_to_str(x, y + 1), 2];
+	yield [coord_to_str(x - 1, y), 3];
+}
+
+function Territory(id, coord, type) {
 	this.id = id;
+	this.type = type;
 	this.coords = new Set();
 	this.coords.add(coord)
 	this.neighbors = new Set();
+	this.huts = 0;
 }
 
 function debugPrintZoneGrid(zoneGrid) {
@@ -290,25 +309,24 @@ function drawCard(num, rot, x, y) {
 function drawZone(zone_info, quad) {
 	var zone_x = BORDER_WIDTH / 2;
 	var zone_y = BORDER_WIDTH / 2;
-	var zone_width = CARD_SIZE / 2 - BORDER_WIDTH / 2 - INNER_BORDER_WIDTH / 2;
 
 	if (quad == 1) {
-		zone_x += zone_width + INNER_BORDER_WIDTH;
+		zone_x += ZONE_WIDTH + INNER_BORDER_WIDTH;
 	} else if (quad == 2) {
-		zone_x += zone_width + INNER_BORDER_WIDTH;
-		zone_y += zone_width + INNER_BORDER_WIDTH;
+		zone_x += ZONE_WIDTH + INNER_BORDER_WIDTH;
+		zone_y += ZONE_WIDTH + INNER_BORDER_WIDTH;
 	} else if (quad == 3) {
-		zone_y += zone_width + INNER_BORDER_WIDTH;
+		zone_y += ZONE_WIDTH + INNER_BORDER_WIDTH;
 	}
 
 	ctx.fillStyle = COLORS[zone_info[0]];
-	ctx.fillRect(zone_x, zone_y, zone_width, zone_width);
+	ctx.fillRect(zone_x, zone_y, ZONE_WIDTH, ZONE_WIDTH);
 
 	// Draw huts
 	if (zone_info.length == 1)
 		return;
 
-	var center = zone_width / 2
+	var center = ZONE_WIDTH / 2
 	ctx.fillStyle = HUT_COLOR;
 
 	// North
@@ -323,7 +341,7 @@ function drawZone(zone_info, quad) {
 	// East
 	if (zone_info[2]) {
 		ctx.fillRect(
-			zone_x + zone_width - BORDER_WIDTH - HUT_SIZE,
+			zone_x + ZONE_WIDTH - BORDER_WIDTH - HUT_SIZE,
 			zone_y + center - HUT_SIZE / 2,
 			HUT_SIZE,
 			HUT_SIZE
@@ -333,7 +351,7 @@ function drawZone(zone_info, quad) {
 	if (zone_info[3]) {
 		ctx.fillRect(
 			zone_x + center - HUT_SIZE / 2,
-			zone_y + zone_width - BORDER_WIDTH - HUT_SIZE,
+			zone_y + ZONE_WIDTH - BORDER_WIDTH - HUT_SIZE,
 			HUT_SIZE,
 			HUT_SIZE
 		);
