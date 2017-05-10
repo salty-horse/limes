@@ -1,12 +1,14 @@
 'use strict';
 
-const CARD_SIZE = 180;
+const CARD_SIZE = 180; // TODO: The border isn't part of the card size. Visible in the next card view
 const BORDER_WIDTH = 2;
 const INNER_BORDER_WIDTH = 2;
 const ZONE_WIDTH = CARD_SIZE / 2 - BORDER_WIDTH / 2 - INNER_BORDER_WIDTH / 2;
 const BORDER_COLOR = '#547062';
 const HUT_COLOR = '#5182ad';
 const HUT_SIZE = CARD_SIZE * 0.1;
+const BUTTON_RADIUS = CARD_SIZE * 0.15;
+const CANVAS_OFFSET = BUTTON_RADIUS * 2 + 10;
 
 
 // Offsets of each zone from card origins.
@@ -32,49 +34,37 @@ const ZONE_ORIGINS = [
 
 var canvas, ctx;
 var hitCanvas, hitCtx;
-const hitRegions = {};
+var nextCardCanvas, nextCardCtx;
+var workerImage;
+var hitRegions = {};
 
-function getNewHitRegionColor() {
+function getNewHitRegion(name) {
 	while (true) {
-		let r = Math.floor(Math.random() * 256);
-		let g = Math.floor(Math.random() * 256);
-		let b = Math.floor(Math.random() * 256);
+		let r = 1 + Math.floor(Math.random() * 255);
+		let g = 1 + Math.floor(Math.random() * 255);
+		let b = 1 + Math.floor(Math.random() * 255);
 		let color = `rgb(${r},${g},${b})`;
-		if (!hitRegions[color])
+		if (!hitRegions[color]) {
+			hitRegions[color] = name;
 			return color;
+		}
 	}
 }
 
 
 var GameState = {
 	PLACE_CARD: 1,
-	ROTATE_CARD: 1,
-	PLACE_OR_MOVE_WORKER: 1,
-	MOVE_WORKER: 1,
-	PLACE_CARD: 1,
-	PLACE_CARD: 1,
+	ROTATE_CARD: 2,
+	PLACE_OR_MOVE_WORKER: 3,
+	PLACE_WORKER: 4,
+	MOVE_WORKER: 5,
+	GAME_OVER: 6,
 }
 
 // This marks the positions of all cards on the canvas
-var CARD_MAP = {
-	// These are set by draw()
-	top: 0,
-	left: 0,
-
-
-	// card grid size and the minimal values - set by addCard()
-	sizeX: 0,
-	sizeY: 0,
-	minX: 0,
-	minY: 0,
-
-	nextCard: 2,
-
-	cards: {},
-	nextPositions: [],
-
+var Game = {
 	addCard: function(coord_str, card) {
-		this.cards[coord_str] = card;
+		this.cards.set(coord_str, card);
 
 		// Adjust grid side
 
@@ -97,16 +87,16 @@ var CARD_MAP = {
 	},
 
 	addCards: function(cards) {
-		for (let [coord_str, card] of Object.entries(cards)) {
-			this.addCard(coord_str, card);
+		for (let coord_str in cards) {
+			this.addCard(coord_str, cards[coord_str]);
 		}
 	},
 
 	markNextCardPositions: function() {
 		this.nextPositions.length = 0;
-		for (let card in this.cards) {
+		for (let card of this.cards.keys()) {
 			for (let [neighbor, ] of getNeighbors(card)) {
-				if (this.cards[neighbor])
+				if (this.cards.has(neighbor))
 					continue;
 
 				let [x, y] = str_to_coords(neighbor);
@@ -120,13 +110,61 @@ var CARD_MAP = {
 				this.nextPositions.push(neighbor);
 			}
 		}
-	}
+	},
+
+	newGame: function() {
+		this.state = GameState.PLACE_CARD;
+
+		// card grid size and the minimal values - set by addCard()
+		this.sizeX = 0;
+		this.sizeY = 0;
+		this.minX = 0;
+		this.minY = 0;
+
+		this.newCard = null;
+		this.newCardPosition = null;
+		this.newCardRotation = 0;
+
+		this.workerSupply = 7;
+
+		this.cardDeck = Object.keys(CARDS);
+		this.cardRNG = new Math.seedrandom('test_game');
+
+		this.cards = new Map();
+		this.nextPositions = [];
+
+		// Draw new card
+		let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
+		this.addCard('0,0', [this.cardDeck[ix], 0]);
+		this.cardDeck.splice(ix, 1);
+		this.update();
+	},
+
+	update: function() {
+		if (this.state == GameState.PLACE_CARD) {
+			if (this.newCard == null) {
+				if (this.cards.size == 16) {
+					this.state = GameState.GAME_OVER;
+				} else {
+					// Draw new card
+					let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
+					this.newCard = this.cardDeck[ix];
+					this.cardDeck.splice(ix, 1);
+					Game.markNextCardPositions();
+				}
+			}
+		}
+
+		if (this.state == GameState.GAME_OVER) {
+			// TODO
+		}
+	},
 }
 
 
 window.addEventListener('load', function(){
 	canvas = document.getElementById('canvas');
-	canvas.width = canvas.height = CARD_SIZE * 5 + 20;
+	canvas.width = canvas.height = CARD_SIZE * 5 + CANVAS_OFFSET * 2 + 10;
 	ctx = canvas.getContext('2d');
 
 	hitCanvas = document.createElement('canvas');
@@ -134,37 +172,44 @@ window.addEventListener('load', function(){
 	hitCanvas.height = canvas.height;
 	hitCtx = hitCanvas.getContext('2d');
 
-	var allCards = {
-		'0,0': [1, 0],
-		'1,0': [2, 0],
-		'2,0': [3, 0],
-		'3,0': [4, 0],
-		'4,0': [5, 0],
-		'5,0': [6, 0],
-		'0,1': [7, 0],
-		'1,1': [8, 0],
-		'2,1': [9, 0],
-		'3,1': [10, 0],
-		'4,1': [11, 0],
-		'5,1': [12, 0],
-		'0,2': [13, 0],
-		'1,2': [14, 0],
-		'2,2': [15, 0],
-		'3,2': [16, 0],
-		'4,2': [17, 0],
-		'5,2': [18, 0],
-		'0,3': [19, 0],
-		'1,3': [20, 0],
-		'2,3': [21, 0],
-		'3,3': [22, 0],
-		'4,3': [23, 0],
-		'5,3': [24, 0],
-	};
+	nextCardCanvas = document.getElementById('next_card');
+	nextCardCanvas.width = CARD_SIZE;
+	nextCardCanvas.height = CARD_SIZE;
+	nextCardCtx = nextCardCanvas.getContext('2d');
 
-	// CARD_MAP.addCards(allCards);
-	
-	CARD_MAP.addCards({
-		'0,0': [1, 0],
+	workerImage = new Image();
+	workerImage.source = 'worker.png';
+
+	// var allCards = {
+	// 	'0,0': [1, 0],
+	// 	'1,0': [2, 0],
+	// 	'2,0': [3, 0],
+	// 	'3,0': [4, 0],
+	// 	'4,0': [5, 0],
+	// 	'5,0': [6, 0],
+	// 	'0,1': [7, 0],
+	// 	'1,1': [8, 0],
+	// 	'2,1': [9, 0],
+	// 	'3,1': [10, 0],
+	// 	'4,1': [11, 0],
+	// 	'5,1': [12, 0],
+	// 	'0,2': [13, 0],
+	// 	'1,2': [14, 0],
+	// 	'2,2': [15, 0],
+	// 	'3,2': [16, 0],
+	// 	'4,2': [17, 0],
+	// 	'5,2': [18, 0],
+	// 	'0,3': [19, 0],
+	// 	'1,3': [20, 0],
+	// 	'2,3': [21, 0],
+	// 	'3,3': [22, 0],
+	// 	'4,3': [23, 0],
+	// 	'5,3': [24, 0],
+	// };
+	// Game.addCards(allCards);
+
+	// Game.addCards({
+		// '0,0': [1, 0],
 		// '1,0': [7, 2],
 		// '2,0': [6, 3],
 		// '3,0': [22, 0],
@@ -180,11 +225,11 @@ window.addEventListener('load', function(){
 		// '1,3': [8, 0],
 		// '2,3': [10, 3],
 		// '3,3': [20, 2],
-	});
-	CARD_MAP.markNextCardPositions();
+	// });
 
+	Game.newGame();
+	parseMap();
 	draw();
-	parseMap(CARD_MAP);
 
 	canvas.addEventListener('click', clickHandler);
 });
@@ -196,18 +241,47 @@ function clickHandler(e) {
 
 	const pixel = hitCtx.getImageData(x, y, 1, 1).data;
 	const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
-	const region = hitRegions[color];
-	if (!region) {
-		console.log('clicked nothing');
+	const clickRegion = hitRegions[color];
+	if (!clickRegion) {
 		return;
 	}
 
-	console.log(`clicked ${region}`);
+	if (Game.state == GameState.PLACE_CARD) {
+		Game.newCardPosition = clickRegion;
+		Game.state = GameState.ROTATE_CARD;
 
-	CARD_MAP.addCard(region, [CARD_MAP.nextCard, 0]);
-	CARD_MAP.nextCard++;
-	CARD_MAP.markNextCardPositions();
+		// TODO: If we just finished placing a card, the map jumps to a position.
+		// Add a pan animation between the two positions
 
+	} else if (Game.state == GameState.ROTATE_CARD) {
+		if (clickRegion == 'confirm') {
+			Game.state = GameState.PLACE_CARD;
+			Game.addCard(Game.newCardPosition, [Game.newCard, Game.newCardRotation]);
+			Game.newCard = null;
+			Game.newCardPosition = null;
+			Game.newCardRotation = 0;
+		} else if (clickRegion == 'cancel') {
+			Game.state = GameState.PLACE_CARD;
+			Game.newCardPosition = null;
+			Game.newCardRotation = 0; // TODO: Keep rotation?
+		} else if (clickRegion == 'rotate_left') {
+			Game.newCardRotation = (Game.newCardRotation + 3) % 4;
+		} else if (clickRegion == 'rotate_right') {
+			Game.newCardRotation = (Game.newCardRotation + 1) % 4;
+		}
+	} else if (Game.state == GameState.PLACE_OR_MOVE_WORKER) {
+		if (clickRegion == 'place_worker') {
+		} else if (clickRegion == 'move_worker') {
+		} else if (clickRegion == 'skip') {
+			Game.state = GameState.PLACE_CARD;
+			Game.newCard = null;
+			Game.newCardPosition = null;
+			Game.newCardRotation = 0;
+		}
+	}
+
+	Game.update();
+	parseMap();
 	draw();
 }
 
@@ -219,12 +293,12 @@ function str_to_coords(s) {
 	return s.split(',').map(x => Number.parseInt(x));
 }
 
-function parseMap(map) {
+function parseMap() {
 	// Build grid of zones
 	var zoneGrid = {};
-	for (let [coord_str, card] of Object.entries(map.cards)) {
+
+	function addCardToGrid(coord_str, card_num, rotation) {
 		let [coord_x, coord_y] = str_to_coords(coord_str);
-		let [card_num, rotation] = card;
 
 		let card_info = CARDS[card_num];
 		let rot_order = ROTATION_ORDER[rotation];
@@ -244,6 +318,14 @@ function parseMap(map) {
 		zoneGrid[coord_to_str(coord_x * 2 + 1, coord_y * 2)] = rotateZone(card_info[rot_order[1]]);
 		zoneGrid[coord_to_str(coord_x * 2 + 1, coord_y * 2 + 1)] = rotateZone(card_info[rot_order[2]]);
 		zoneGrid[coord_to_str(coord_x * 2, coord_y * 2 + 1)] = rotateZone(card_info[rot_order[3]]);
+	}
+
+	for (let [coord_str, [num, rotation]] of Game.cards) {
+		addCardToGrid(coord_str, num, rotation);
+	}
+
+	if (Game.state == GameState.ROTATE_CARD) {
+		addCardToGrid(Game.newCardPosition, Game.newCard, Game.newCardRotation);
 	}
 
 	debugPrintZoneGrid(zoneGrid);
@@ -312,6 +394,7 @@ function parseMap(map) {
 		}
 	}
 
+	console.log(`Territories: ${territories.length}`);
 	// for (let territory of territories) {
 	// 	let coords = Array.from(territory.zones).join('  ');
 	// 	let neighborTerritories = Array.from(territory.neighborTerritories).join(' ');
@@ -376,12 +459,24 @@ function debugPrintZoneGrid(zoneGrid) {
 }
 
 function draw() {
+	// Update HTML
+	if (Game.state == GameState.PLACE_CARD) {
+		drawCard(nextCardCtx, Game.newCard, 0, 0, 0);
+	}
+	document.getElementById('supply').textContent = Game.workerSupply;
+
+	// Draw to main canvas
+
+	hitRegions = {};
 
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 	hitCtx.clearRect(0, 0, canvas.width, canvas.height);
 
 	// Calculate grid boundary, leaving room for 1 new card above and to the left
-	var number_coords = Object.keys(CARD_MAP.cards).map(str_to_coords);
+	var number_coords = [];
+	for (let coord_str of Game.cards.keys()) {
+		number_coords.push(str_to_coords(coord_str));
+	}
 	var x_coords = number_coords.map(coords => coords[0]);
 	var y_coords = number_coords.map(coords => coords[1]);
 	var min_x = Math.min.apply(null, x_coords);
@@ -404,13 +499,54 @@ function draw() {
 
 	ctx.save();
 	hitCtx.save();
-	
-	ctx.translate(5, 5);
-	hitCtx.translate(5, 5);
 
-	for (let [coord_str, card_info] of Object.entries(CARD_MAP.cards)) {
+	ctx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
+	hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
+
+	// Draw future placement positions
+	if (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD) {
+		for (let coord_str of Game.nextPositions) {
+
+			if (coord_str == Game.newCardPosition)
+				continue;
+
+			let [coord_x, coord_y] = str_to_coords(coord_str);
+			if (Game.state == GameState.PLACE_CARD) {
+				ctx.strokeStyle = 'red';
+			} else {
+				ctx.strokeStyle = 'grey';
+			}
+			ctx.lineWidth = BORDER_WIDTH;
+			ctx.setLineDash([8, 4]);
+			ctx.strokeRect(
+				(coord_x - top_x) * CARD_SIZE + 5,
+				(coord_y - top_y) * CARD_SIZE + 5,
+				CARD_SIZE - 10,
+				CARD_SIZE - 10
+			);
+
+			if (Game.state == GameState.PLACE_CARD) {
+				let hitRegionColor = getNewHitRegion(coord_str);
+				hitCtx.fillStyle = hitRegionColor;
+				hitCtx.lineWidth = BORDER_WIDTH;
+				hitCtx.fillRect(
+					(coord_x - top_x) * CARD_SIZE + 5,
+					(coord_y - top_y) * CARD_SIZE + 5,
+					CARD_SIZE - 10,
+					CARD_SIZE - 10
+				);
+			}
+		}
+	}
+
+	ctx.setLineDash([]);
+
+	// Draw cards
+
+	for (let [coord_str, card_info] of Game.cards) {
 		let [coord_x, coord_y] = str_to_coords(coord_str);
 		drawCard(
+			ctx,
 			card_info[0],
 			card_info[1],
 			(coord_x - top_x) * CARD_SIZE,
@@ -418,36 +554,47 @@ function draw() {
 		);
 	}
 
-	// Draw future placement positions
-	for (let coord_str of CARD_MAP.nextPositions) {
-		let [coord_x, coord_y] = str_to_coords(coord_str);
-		ctx.strokeStyle = 'red';
-		ctx.lineWidth = BORDER_WIDTH;
-		ctx.setLineDash([8, 4]);
-		ctx.strokeRect(
-			(coord_x - top_x) * CARD_SIZE + 5,
-			(coord_y - top_y) * CARD_SIZE + 5,
-			CARD_SIZE - 10,
-			CARD_SIZE - 10,
+	// Draw newly-placed card
+
+	if (Game.newCardPosition) {
+		let [coord_x, coord_y] = str_to_coords(Game.newCardPosition);
+		let x = (coord_x - top_x) * CARD_SIZE;
+		let y = (coord_y - top_y) * CARD_SIZE;
+		drawCard(
+			ctx,
+			Game.newCard,
+			Game.newCardRotation,
+			x,
+			y,
 		);
 
-		let hitRegionColor = getNewHitRegionColor();
-		hitRegions[hitRegionColor] = coord_str;
-		hitCtx.fillStyle = hitRegionColor;
-		hitCtx.lineWidth = BORDER_WIDTH;
-		hitCtx.fillRect(
-			(coord_x - top_x) * CARD_SIZE + 5,
-			(coord_y - top_y) * CARD_SIZE + 5,
-			CARD_SIZE - 10,
-			CARD_SIZE - 10,
-		);
+
+		// Draw UI elements
+
+		ctx.save();
+		hitCtx.save();
+
+		ctx.translate(x, y);
+		hitCtx.translate(x, y);
+
+		if (Game.state == GameState.ROTATE_CARD) {
+			// TODO: Replace unicode with images for better compatibility. Make sure images
+			// don't hide background elements (huts)
+			drawButton('confirm', CARD_SIZE / 2, CARD_SIZE + BUTTON_RADIUS - 3, '✓');
+			drawButton('cancel', CARD_SIZE + 10, 0, '✗');
+			drawButton('rotate_right', -10, CARD_SIZE / 2 - BUTTON_RADIUS - 10, '⟳');
+			drawButton('rotate_left', -10, CARD_SIZE / 2 + BUTTON_RADIUS + 10, '⟲');
+		}
+
+		hitCtx.restore();
+		ctx.restore();
 	}
-	
+
 	hitCtx.restore();
 	ctx.restore();
 }
 
-function drawCard(num, rot, x, y) {
+function drawCard(ctx, num, rot, x, y) {
 
 	ctx.save();
 
@@ -472,7 +619,7 @@ function drawCard(num, rot, x, y) {
 	ctx.beginPath();
 	ctx.moveTo(
 		BORDER_WIDTH / 2,
-		CARD_SIZE / 2,
+		CARD_SIZE / 2
 	);
 	ctx.lineTo(
 		CARD_SIZE - BORDER_WIDTH / 2,
@@ -480,7 +627,7 @@ function drawCard(num, rot, x, y) {
 	);
 	ctx.moveTo(
 		CARD_SIZE / 2,
-		BORDER_WIDTH / 2,
+		BORDER_WIDTH / 2
 	);
 	ctx.lineTo(
 		CARD_SIZE / 2,
@@ -491,24 +638,16 @@ function drawCard(num, rot, x, y) {
 	var card_info = CARDS[num];
 
 	for (let i = 0; i < 4; i++) {
-		drawZone(card_info[i], i);
+		drawZone(ctx, card_info[i], i);
 	}
 
 	// Draw card number
 
-	ctx.fillStyle = BORDER_COLOR;
-	var circle_x = CARD_SIZE / 2;
-	var circle_y = CARD_SIZE / 2;
-	var radius = CARD_SIZE * 0.1;
-	ctx.beginPath();
-	ctx.arc(circle_x, circle_y, radius, 0, 2 * Math.PI);
-	ctx.fill();
+	let circle_x = CARD_SIZE / 2;
+	let circle_y = CARD_SIZE / 2;
 
-	ctx.fillStyle = 'white';
-	ctx.beginPath();
-	radius = CARD_SIZE * 0.09;
-	ctx.arc(circle_x, circle_y, radius, 0, 2 * Math.PI);
-	ctx.fill();
+	drawCircle(ctx, circle_x, circle_y, CARD_SIZE * 0.1, BORDER_COLOR);
+	drawCircle(ctx, circle_x, circle_y, CARD_SIZE * 0.09, 'white');
 
 	ctx.font = (CARD_SIZE * 0.1).toString() + 'px serif';
 	ctx.textAlign = 'center';
@@ -523,7 +662,30 @@ function drawCard(num, rot, x, y) {
 	ctx.restore();
 }
 
-function drawZone(zone_info, quad) {
+function drawButton(name, x, y, text) {
+	drawCircle(ctx, x, y, BUTTON_RADIUS, 'rgba(0,0,0,0.4)');
+	drawCircle(ctx, x, y, BUTTON_RADIUS * 0.9, 'rgba(255,255,255,0.4)');
+
+	let hitRegionColor = getNewHitRegion(name);
+	drawCircle(hitCtx, x, y, BUTTON_RADIUS, hitRegionColor);
+
+	if (text) {
+		ctx.font = BUTTON_RADIUS.toString() + 'px serif';
+		ctx.textAlign = 'center';
+		ctx.textBaseline = 'middle';
+		ctx.fillStyle = 'black';
+		ctx.fillText(text, x, y);
+	}
+}
+
+function drawCircle(ctx, x, y, radius, color) {
+	ctx.fillStyle = color;
+	ctx.beginPath();
+	ctx.arc(x, y, radius, 0, 2 * Math.PI);
+	ctx.fill();
+}
+
+function drawZone(ctx, zone_info, quad) {
 	var [zone_x, zone_y] = ZONE_ORIGINS[quad];
 
 	ctx.fillStyle = COLORS[zone_info[0]];

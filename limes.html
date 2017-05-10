@@ -4,9 +4,21 @@
     <meta charset="utf-8">
     <title>Limes</title>
     <script src="limes.js"></script>
-    <link rel="stylesheet" href="css/reset/reset.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/2.4.3/seedrandom.min.js"></script>
   </head>
   <body>
-  <canvas id="canvas" width="1500" height="1500" style="border: 1px solid black;"></canvas>
+  <canvas id="canvas" style="border: 1px solid black; float: left; margin-right: 20px;"></canvas>
+  <div id="info" style="margin-top: 20px;">
+    <h1>LIMES</h1>
+    <ul style="list-style: none;">
+        <li>Score: <span id="score">0</span></li>
+        <li>Supply: <span id="supply">0</span> × <img style="height: 1em;" src="worker.png"/></li>
+    </ul>
+    <div>
+      <span style="display: block;">Next card:</span>
+      <canvas id="next_card"></canvas>
+    </div>
+    <h2>Add UNDO / CONFIRM / UNDO / SKIP STEP buttons here</h2>
+  </div>
   </body>
 </html>
