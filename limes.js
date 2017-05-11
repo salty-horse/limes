@@ -8,7 +8,7 @@ const BORDER_COLOR = '#547062';
 const HUT_COLOR = '#5182ad';
 const HUT_SIZE = CARD_SIZE * 0.1;
 const BUTTON_RADIUS = CARD_SIZE * 0.15;
-const CANVAS_OFFSET = BUTTON_RADIUS * 2 + 10;
+const CANVAS_OFFSET = BUTTON_RADIUS * 2 - 10;
 
 
 // Offsets of each zone from card origins.
