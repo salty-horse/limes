@@ -541,9 +541,6 @@ function parseMap() {
 	// Build list of adjacent territories
 	for (let territory of Game.territories) {
 		for (let zone of territory.neighbors) {
-			console.log(zone);
-			console.log(Game.zone_territories);
-			console.log(Game.zone_territories.get(zone));
 			territory.neighborTerritories.add(Game.zone_territories.get(zone));
 		}
 	}
@@ -656,7 +653,7 @@ function calcTerritoryPaths() {
 				start_coord = new Point(min_x, y);
 			}
 		}
-		console.log(`#################### territory ${territory.id} start coord is ${start_coord} #######################`);
+		// console.log(`territory ${territory.id} start coord is ${start_coord}`);
 
 		let startCorners = getZoneCornersInCanvas(start_coord);
 
@@ -665,8 +662,8 @@ function calcTerritoryPaths() {
 		territory.path = p;
 		p.moveTo(startCorners[3][0], startCorners[3][1]);
 		p.lineTo(startCorners[0][0], startCorners[0][1]);
-		console.log(`p.moveTo(${startCorners[3][0]}, ${startCorners[3][1]});`);
-		console.log(`p.lineTo(${startCorners[0][0]}, ${startCorners[0][1]});`);
+		// console.log(`p.moveTo(${startCorners[3][0]}, ${startCorners[3][1]});`);
+		// console.log(`p.lineTo(${startCorners[0][0]}, ${startCorners[0][1]});`);
 
 		let direction = 1;
 		let curr_coord = start_coord;
@@ -681,7 +678,7 @@ function calcTerritoryPaths() {
 				if (!curr_coord_in_territory) {
 					// Going from outside in.
 
-					// Look to the right of the new zone. If it's inside the territory, mark its back left corner
+					// Look to the right of the new zone. If it's inside the territory, mark its BACK LEFT corner
 					let left_zone;
 					if (direction == 0) {
 						left_zone = new Point(next_coord.x + 1, next_coord.y);
@@ -696,21 +693,21 @@ function calcTerritoryPaths() {
 						let corners = getZoneCornersInCanvas(left_zone);
 						let corner = corners[(direction + 3) % 4];
 						p.lineTo(corner[0], corner[1]);
-						console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
+						// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 					}
 
 					// Add the BACK RIGHT corner of the new zone to the path.
 					let corners = getZoneCornersInCanvas(next_coord);
 					let corner = corners[(direction + 2) % 4];
 					p.lineTo(corner[0], corner[1]);
-					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
+					// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				} else {
 					// Staying inside.
 					// Add the FRONT LEFT corner of the old zone to the path
 					let corners = getZoneCornersInCanvas(curr_coord);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
-					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
+					// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				}
 
 				curr_coord_in_territory = true;
@@ -724,7 +721,7 @@ function calcTerritoryPaths() {
 					let corners = getZoneCornersInCanvas(curr_coord);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
-					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
+					// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				}
 
 				curr_coord_in_territory = false;
