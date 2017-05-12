@@ -12,6 +12,134 @@ const BUTTON_RADIUS = CARD_WIDTH * 0.15;
 const CANVAS_OFFSET = BUTTON_RADIUS * 2 - 10;
 
 
+class Point {
+	constructor(x, y) {
+		this.x = x;
+		this.y = y;
+	}
+
+	equals(other) {
+		if (!other) {
+			return false;
+		}
+		if (!(other instanceof Point)) {
+			throw new Error('other must be a Point');
+		}
+		return this.x == other.x && this.y == other.y;
+	}
+
+	toString() {
+		return '(' + this.x + ', ' + this.y + ')';
+	}
+
+	inspect() {
+		return this.toString();
+	}
+
+	toImmutable() {
+		return this.x + ',' + this.y;
+	}
+
+	static fromImmutable(s) {
+		let p = s.split(',', 2).map(x => Number.parseInt(x));
+		return new Point(p[0], p[1]);
+	}
+}
+
+class PointMap {
+	constructor() {
+		this._map = new Map();
+	}
+
+	get size() {
+		return this._map.size;
+	}
+
+	get(key) {
+		return this._map.get(key.toImmutable());
+	}
+
+	has(key) {
+		return this._map.has(key.toImmutable());
+	}
+
+	* keys() {
+		for (let key of this._map.keys()) {
+			yield Point.fromImmutable(key);
+		}
+	}
+
+	set(key, value) {
+		if (!(key instanceof Point)) {
+			throw new Error('PointMap keys must be Points');
+		}
+		this._map.set(key.toImmutable(), value);
+	}
+
+	delete(key) {
+		return this._map.delete(key.toImmutable());
+	}
+
+	[Symbol.iterator]() {
+		let map_it = this._map[Symbol.iterator]();
+
+		return {
+			next: function() {
+				let map_next = map_it.next();
+				if (map_next.value !== undefined) {
+					map_next.value[0] = Point.fromImmutable(map_next.value[0]);
+				}
+				return map_next;
+			}
+		}
+	}
+}
+
+class PointSet {
+	constructor() {
+		this._set = new Set();
+	}
+
+	get size() {
+		return this._set.size;
+	}
+
+	has(value) {
+		return this._set.has(value.toImmutable());
+	}
+
+	add(value) {
+		if (!(value instanceof Point)) {
+			throw new Error('PointSet values must be Points');
+		}
+		this._set.add(value.toImmutable());
+	}
+
+	delete(value) {
+		return this._set.delete(value.toImmutable());
+	}
+
+	* values() {
+		for (let value of this._set.values()) {
+			yield Point.fromImmutable(value);
+		}
+	}
+
+	[Symbol.iterator]() {
+		let set_it = this._set[Symbol.iterator]();
+
+		return {
+			next: function() {
+				let set_next = set_it.next();
+				if (set_next.value !== undefined) {
+					set_next.value = Point.fromImmutable(set_next.value);
+				}
+				return set_next;
+			}
+		}
+	}
+}
+
 // Offsets of each zone from card origins.
 // These are used to identify zone x/y positions.
 const ZONE_ORIGINS = [
@@ -64,43 +192,35 @@ var GameState = {
 
 // This marks the positions of all cards on the canvas
 var Game = {
-	addCard: function(coord_str, card) {
-		this.cards.set(coord_str, card);
+	addCard: function(coord, card) {
+		this.cards.set(coord, card);
 
 		// Adjust grid side
 
-		let [coord_x, coord_y] = str_to_coords(coord_str);
-
-		if (coord_x < this.minX) {
-			this.sizeX += this.minX - coord_x;
-			this.minX = coord_x;
+		if (coord.x < this.minX) {
+			this.sizeX += this.minX - coord.x;
+			this.minX = coord.x;
 		}
-		if (coord_y < this.minY) {
-			this.sizeY += this.minY - coord_y;
-			this.minY = coord_y;
+		if (coord.y < this.minY) {
+			this.sizeY += this.minY - coord.y;
+			this.minY = coord.y;
 		}
-		if (coord_x >= this.minX + this.sizeX) {
-			this.sizeX = coord_x - this.minX + 1;
+		if (coord.x >= this.minX + this.sizeX) {
+			this.sizeX = coord.x - this.minX + 1;
 		}
-		if (coord_y >= this.minY + this.sizeY) {
-			this.sizeY = coord_y - this.minY + 1;
-		}
-	},
-
-	addCards: function(cards) {
-		for (let coord_str in cards) {
-			this.addCard(coord_str, cards[coord_str]);
+		if (coord.y >= this.minY + this.sizeY) {
+			this.sizeY = coord.y - this.minY + 1;
 		}
 	},
 
 	// This is used when undoing a card placement
-	removeCard: function(coord_str) {
-		this.cards.delete(coord_str);
+	removeCard: function(coord) {
+		this.cards.delete(coord);
 
 		// Adjust grid side
-		var number_coords = Array.from(this.cards.keys()).map(str_to_coords);
-		var x_coords = number_coords.map(coords => coords[0]);
-		var y_coords = number_coords.map(coords => coords[1]);
+		var number_coords = Array.from(this.cards.keys());
+		var x_coords = number_coords.map(coords => coords.x);
+		var y_coords = number_coords.map(coords => coords.y);
 		this.minX = Math.min.apply(null, x_coords);
 		this.minY = Math.min.apply(null, y_coords);
 		this.sizeX = Math.max.apply(null, x_coords) - this.minX + 1;
@@ -114,12 +234,10 @@ var Game = {
 				if (this.cards.has(neighbor))
 					continue;
 
-				let [x, y] = str_to_coords(neighbor);
-
-				if (this.sizeX == 4 && (x < this.minX || x >= this.minX + this.sizeX))
+				if (this.sizeX == 4 && (neighbor.x < this.minX || neighbor.x >= this.minX + this.sizeX))
 					continue;
 
-				if (this.sizeY == 4 && (y < this.minY || y >= this.minY + this.sizeY))
+				if (this.sizeY == 4 && (neighbor.y < this.minY || neighbor.y >= this.minY + this.sizeY))
 					continue;
 
 				this.nextPositions.push(neighbor);
@@ -146,12 +264,12 @@ var Game = {
 		this.cardDeck = Object.keys(CARDS);
 		this.cardRNG = new Math.seedrandom('test_game');
 
-		this.cards = new Map();
+		this.cards = new PointMap();
 		this.nextPositions = [];
 
 		// Draw new card
 		let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
-		this.addCard('0,0', [this.cardDeck[ix], 0]);
+		this.addCard(new Point(0, 0), [this.cardDeck[ix], 0]);
 		this.cardDeck.splice(ix, 1);
 		this.update();
 	},
@@ -291,7 +409,7 @@ window.addEventListener('load', function() {
 // Handles action caused by button presses (HTML buttons or canvas)
 function actionHandler(action) {
 	if (Game.state == GameState.PLACE_CARD) {
-		Game.newCardPosition = action;
+		Game.newCardPosition = Point.fromImmutable(action);
 		Game.state = GameState.ROTATE_CARD;
 
 		// TODO: If we just finished placing a card, the map jumps to a position.
@@ -332,26 +450,11 @@ function actionHandler(action) {
 	draw();
 }
 
-// Works with (x,y) or ([x,y])
-function coord_to_str(x, y) {
-	if (y == undefined) {
-		y = x[1];
-		x = x[0];
-	}
-	return x.toString() + ',' + y.toString();
-}
-
-function str_to_coords(s) {
-	return s.split(',').map(x => Number.parseInt(x));
-}
-
 function parseMap() {
 	// Build grid of zones
-	var zoneGrid = {};
+	var zoneGrid = new PointMap();
 
-	function addCardToGrid(coord_str, card_num, rotation) {
-		let [coord_x, coord_y] = str_to_coords(coord_str);
-
+	function addCardToGrid(coord, card_num, rotation) {
 		let card_info = CARDS[card_num];
 		let rot_order = ROTATION_ORDER[rotation];
 
@@ -366,14 +469,14 @@ function parseMap() {
 			return new_zone;
 		}
 
-		zoneGrid[coord_to_str(coord_x * 2, coord_y * 2)] = rotateZone(card_info[rot_order[0]]);
-		zoneGrid[coord_to_str(coord_x * 2 + 1, coord_y * 2)] = rotateZone(card_info[rot_order[1]]);
-		zoneGrid[coord_to_str(coord_x * 2 + 1, coord_y * 2 + 1)] = rotateZone(card_info[rot_order[2]]);
-		zoneGrid[coord_to_str(coord_x * 2, coord_y * 2 + 1)] = rotateZone(card_info[rot_order[3]]);
+		zoneGrid.set(new Point(coord.x * 2, coord.y * 2), rotateZone(card_info[rot_order[0]]));
+		zoneGrid.set(new Point(coord.x * 2 + 1, coord.y * 2), rotateZone(card_info[rot_order[1]]));
+		zoneGrid.set(new Point(coord.x * 2 + 1, coord.y * 2 + 1), rotateZone(card_info[rot_order[2]]));
+		zoneGrid.set(new Point(coord.x * 2, coord.y * 2 + 1), rotateZone(card_info[rot_order[3]]));
 	}
 
-	for (let [coord_str, [num, rotation]] of Game.cards) {
-		addCardToGrid(coord_str, num, rotation);
+	for (let [coord, [num, rotation]] of Game.cards) {
+		addCardToGrid(coord, num, rotation);
 	}
 
 	if (Game.state == GameState.ROTATE_CARD) {
@@ -384,17 +487,17 @@ function parseMap() {
 
 	// Collect zones into territories
 	Game.territories = [];
-	Game.zone_territories = {};
-	var unscanned_coords = new Set();
+	Game.zone_territories = new PointMap();
+	var unscanned_coords = new PointSet();
 
 	// Collect all towers, which are a territory on their own
-	for (let coords of Object.keys(zoneGrid)) {
-		if (zoneGrid[coords][0] == 'T') {
+	for (let [coords, zone_info] of zoneGrid) {
+		if (zone_info[0] == 'T') {
 			let territory = new Territory(Game.territories.length, coords, 'T');
 			Game.territories.push(territory);
-			Game.zone_territories[coords] = territory.id;
+			Game.zone_territories.set(coords, territory.id);
 			for (let [neighbor, ] of getNeighbors(coords)) {
-				if (zoneGrid[neighbor]) {
+				if (zoneGrid.has(neighbor)) {
 					territory.neighbors.add(neighbor);
 				}
 			}
@@ -405,28 +508,29 @@ function parseMap() {
 
 	// Scan all non-tower zones
 	while (unscanned_coords.size) {
-		let coords = unscanned_coords.keys().next().value;
+		let coords = unscanned_coords.values().next().value;
 		unscanned_coords.delete(coords);
-		let territory = new Territory(Game.territories.length, coords, zoneGrid[coords][0]);
+		let territory = new Territory(Game.territories.length, coords, zoneGrid.get(coords)[0]);
 		Game.territories.push(territory);
-		Game.zone_territories[coords] = territory.id;
+		Game.zone_territories.set(coords, territory.id);
 
 		// Explore the new territory
-		var coords_to_explore = new Set([coords]);
+		var coords_to_explore = new PointSet();
+		coords_to_explore.add(coords);
 		while (coords_to_explore.size) {
-			let coords = coords_to_explore.keys().next().value;
+			let coords = coords_to_explore.values().next().value;
 			coords_to_explore.delete(coords);
 			for (let [neighbor, direction] of getNeighbors(coords)) {
-				if (unscanned_coords.has(neighbor) && zoneGrid[neighbor][0] == territory.type) {
+				if (unscanned_coords.has(neighbor) && zoneGrid.get(neighbor)[0] == territory.type) {
 					territory.zones.add(neighbor);
-					Game.zone_territories[neighbor] = territory.id;
+					Game.zone_territories.set(neighbor, territory.id);
 					unscanned_coords.delete(neighbor);
 					coords_to_explore.add(neighbor);
-				} else if (zoneGrid[neighbor]) {
+				} else if (zoneGrid.has(neighbor)) {
 					territory.neighbors.add(neighbor);
 
 					// Count adjacent hut
-					if (territory.type == 'W' && zoneGrid[neighbor][1 + Math.abs(direction + 2) % 4]) {
+					if (territory.type == 'W' && zoneGrid.get(neighbor)[1 + Math.abs(direction + 2) % 4]) {
 						territory.huts += 1;
 					}
 				}
@@ -437,7 +541,10 @@ function parseMap() {
 	// Build list of adjacent territories
 	for (let territory of Game.territories) {
 		for (let zone of territory.neighbors) {
-			territory.neighborTerritories.add(Game.zone_territories[zone]);
+			console.log(zone);
+			console.log(Game.zone_territories);
+			console.log(Game.zone_territories.get(zone));
+			territory.neighborTerritories.add(Game.zone_territories.get(zone));
 		}
 	}
 
@@ -449,47 +556,29 @@ function parseMap() {
 	for (let territory of Game.territories) {
 		let coords = Array.from(territory.zones).join('  ');
 		let neighborTerritories = Array.from(territory.neighborTerritories).join(' ');
-	// 	let r = Math.floor(Math.random() * 256);
-	// 	let g = Math.floor(Math.random() * 256);
-	// 	let b = Math.floor(Math.random() * 256);
-	// 	let color = `rgba(${r},${g},${b},0.7)`;
-	// 	markCoords(territory.zones, color, territory.id);
 		console.log(`${territory.id}: { type: ${territory.type}, neighbors: ${neighborTerritories} huts: ${territory.huts}, coords: ${coords} }`);
 	}
 }
 
-// function markCoords(coords_list, color, id) {
-// 	for (let coords of coords_list) {
-// 		let [zone_x, zone_y] = str_to_coords(coords);
-// 		//ctx.fillStyle = color;
-// 		//ctx.fillRect(20 + zone_x * ZONE_WIDTH + 5, 40 + zone_y * ZONE_WIDTH + 5, ZONE_WIDTH / 2, ZONE_WIDTH / 2);
-// 		ctx.font = "20px serif";
-// 		ctx.textBaseline = "hanging";
-// 		ctx.fillStyle = "black";
-// 		ctx.fillText(id.toString(), 30 + zone_x * ZONE_WIDTH + 5, 50 + zone_y * ZONE_WIDTH + 5);
-// 	}
-// }
-
 function* getNeighbors(coords) {
-	var [x, y] = str_to_coords(coords);
-	yield [coord_to_str(x, y - 1), 0];
-	yield [coord_to_str(x + 1, y), 1];
-	yield [coord_to_str(x, y + 1), 2];
-	yield [coord_to_str(x - 1, y), 3];
+	yield [new Point(coords.x, coords.y - 1), 0];
+	yield [new Point(coords.x + 1, coords.y), 1];
+	yield [new Point(coords.x, coords.y + 1), 2];
+	yield [new Point(coords.x - 1, coords.y), 3];
 }
 
 function Territory(id, zone, type) {
 	this.id = id;
 	this.type = type;
-	this.zones = new Set();
+	this.zones = new PointSet();
 	this.zones.add(zone)
-	this.neighbors = new Set();
+	this.neighbors = new PointSet();
 	this.neighborTerritories = new Set();
 	this.huts = 0;
 }
 
 function debugPrintZoneGrid(zoneGrid) {
-	var number_coords = Object.keys(zoneGrid).map(str_to_coords);
+	var number_coords = Object.keys(zoneGrid).map(Point.fromImmutable);
 	var x_coords = number_coords.map(coords => coords[0]);
 	var y_coords = number_coords.map(coords => coords[1]);
 	var min_x = Math.min.apply(null, x_coords);
@@ -500,7 +589,7 @@ function debugPrintZoneGrid(zoneGrid) {
 	for (let i = min_y; i <= max_y; i++) {
 		let row = [];
 		for (let j = min_x; j <= max_x; j++) {
-			let val = zoneGrid[coord_to_str(j, i)];
+			let val = zoneGrid[new Point(j, i).toImmutable()];
 			row.push(val ? `${i},${j} ${val[0]}${val[1]}${val[2]}${val[3]}${val[4]}` : ' ');
 		}
 		console.log(row.join(' '));
@@ -510,13 +599,12 @@ function debugPrintZoneGrid(zoneGrid) {
 // Asssuming the card grid is drawn from 0,0,
 // gets the positions of the 4 corners [NW, NE, SE, SW]
 function getZoneCornersInCanvas(coords) {
-	let [x, y] = str_to_coords(coords);
-	var cardX = Math.floor(x / 2);
-	var cardY = Math.floor(y / 2);
+	var cardX = Math.floor(coords.x / 2);
+	var cardY = Math.floor(coords.y / 2);
 	var canvasCardX = cardX * (CARD_WIDTH + CARD_SPACING);
 	var canvasCardY = cardY * (CARD_WIDTH + CARD_SPACING);
-	var modX = Math.abs(x % 2);
-	var modY = Math.abs(y % 2);
+	var modX = Math.abs(coords.x % 2);
+	var modY = Math.abs(coords.y % 2);
 	var zoneQuad;
 
 	if (modX == 0 && modY == 0) {
@@ -538,8 +626,8 @@ function getZoneCornersInCanvas(coords) {
 	];
 }
 
+// Calculates a path around each territory
 function calcTerritoryPaths() {
-	// TODO: Collect the boundaries of each territory
 	for (let territory of Game.territories) {
 		// Size 1 territories are easiest
 		if (territory.zones.size == 1) {
@@ -557,23 +645,24 @@ function calcTerritoryPaths() {
 		}
 
 		// Find the top-left coordinate
-		let number_coords = Array.from(territory.zones).map(str_to_coords);
-		let x_coords = number_coords.map(coords => coords[0]);
-		let y_coords = number_coords.map(coords => coords[1]);
+		let number_coords = Array.from(territory.zones);
+		let x_coords = number_coords.map(coords => coords.x);
+		let y_coords = number_coords.map(coords => coords.y);
 		let min_x = Math.min.apply(null, x_coords);
 		let min_y = Math.min.apply(null, y_coords);
 		let start_coord;
 		for (let y = min_y; !start_coord; y++) {
-			if (territory.zones.has(coord_to_str(min_x, y))) {
-				start_coord = [min_x, y];
+			if (territory.zones.has(new Point(min_x, y))) {
+				start_coord = new Point(min_x, y);
 			}
 		}
 		console.log(`#################### territory ${territory.id} start coord is ${start_coord} #######################`);
 
-		let startCorners = getZoneCornersInCanvas(coord_to_str(start_coord));
+		let startCorners = getZoneCornersInCanvas(start_coord);
 
 		// The left side of the zone forms the initial path
-		var p = new Path2D();
+		let p = new Path2D();
+		territory.path = p;
 		p.moveTo(startCorners[3][0], startCorners[3][1]);
 		p.lineTo(startCorners[0][0], startCorners[0][1]);
 		console.log(`p.moveTo(${startCorners[3][0]}, ${startCorners[3][1]});`);
@@ -584,41 +673,41 @@ function calcTerritoryPaths() {
 		let curr_coord_in_territory = true;
 
 		// Start by moving left
-		let next_coord = [start_coord[0] + 1, start_coord[1]];
+		let next_coord = new Point(start_coord.x + 1, start_coord.y);
 
 		do {
 			// console.log(`next coord is ${next_coord}`);
-			if (territory.zones.has(coord_to_str(next_coord))) {
+			if (territory.zones.has(next_coord)) {
 				if (!curr_coord_in_territory) {
 					// Going from outside in.
 
 					// Look to the right of the new zone. If it's inside the territory, mark its back left corner
 					let left_zone;
 					if (direction == 0) {
-						left_zone = [next_coord[0] + 1, next_coord[1]];
+						left_zone = new Point(next_coord.x + 1, next_coord.y);
 					} else if (direction == 1) {
-						left_zone = [next_coord[0], next_coord[1] + 1];
+						left_zone = new Point(next_coord.x, next_coord.y + 1);
 					} else if (direction == 2) {
-						left_zone = [next_coord[0] - 1, next_coord[1]];
+						left_zone = new Point(next_coord.x - 1, next_coord.y);
 					} else if (direction == 3) {
-						left_zone = [next_coord[0], next_coord[1] - 1];
+						left_zone = new Point(next_coord.x, next_coord.y - 1);
 					}
-					if (territory.zones.has(coord_to_str(left_zone))) {
-						let corners = getZoneCornersInCanvas(coord_to_str(left_zone));
+					if (territory.zones.has(left_zone)) {
+						let corners = getZoneCornersInCanvas(left_zone);
 						let corner = corners[(direction + 3) % 4];
 						p.lineTo(corner[0], corner[1]);
 						console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 					}
 
 					// Add the BACK RIGHT corner of the new zone to the path.
-					let corners = getZoneCornersInCanvas(coord_to_str(next_coord));
+					let corners = getZoneCornersInCanvas(next_coord);
 					let corner = corners[(direction + 2) % 4];
 					p.lineTo(corner[0], corner[1]);
 					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				} else {
 					// Staying inside.
 					// Add the FRONT LEFT corner of the old zone to the path
-					let corners = getZoneCornersInCanvas(coord_to_str(curr_coord));
+					let corners = getZoneCornersInCanvas(curr_coord);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
 					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
@@ -632,7 +721,7 @@ function calcTerritoryPaths() {
 				if (curr_coord_in_territory) {
 					// Going from inside out.
 					// Add the FRONT LEFT corner of the current zone to the path
-					let corners = getZoneCornersInCanvas(coord_to_str(curr_coord));
+					let corners = getZoneCornersInCanvas(curr_coord);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
 					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
@@ -647,18 +736,17 @@ function calcTerritoryPaths() {
 			// Move to the next coordinate
 			curr_coord = next_coord;
 			if (direction == 0) {
-				next_coord = [curr_coord[0], curr_coord[1] - 1];
+				next_coord = new Point(curr_coord.x, curr_coord.y - 1);
 			} else if (direction == 1) {
-				next_coord = [curr_coord[0] + 1, curr_coord[1]];
+				next_coord = new Point(curr_coord.x + 1, curr_coord.y);
 			} else if (direction == 2) {
-				next_coord = [curr_coord[0], curr_coord[1] + 1];
+				next_coord = new Point(curr_coord.x, curr_coord.y + 1);
 			} else if (direction == 3) {
-				next_coord = [curr_coord[0] - 1, curr_coord[1]];
+				next_coord = new Point(curr_coord.x - 1, curr_coord.y);
 			}
-		} while (start_coord[0] != curr_coord[0] || start_coord[1] != curr_coord[1]);
+		} while (!start_coord.equals(curr_coord));
 
 		p.closePath();
-		territory.path = p;
 	}
 }
 
@@ -671,11 +759,11 @@ function draw() {
 
 	// Calculate map origin, leaving room for 1 new card above and to the left
 	var number_coords = [];
-	for (let coord_str of Game.cards.keys()) {
-		number_coords.push(str_to_coords(coord_str));
+	for (let coord of Game.cards.keys()) {
+		number_coords.push(coord);
 	}
-	var x_coords = number_coords.map(coords => coords[0]);
-	var y_coords = number_coords.map(coords => coords[1]);
+	var x_coords = number_coords.map(coords => coords.x);
+	var y_coords = number_coords.map(coords => coords.y);
 	var min_x = Math.min.apply(null, x_coords);
 	var min_y = Math.min.apply(null, y_coords);
 	var max_x = Math.max.apply(null, x_coords);
@@ -702,12 +790,11 @@ function draw() {
 
 	// Draw future placement positions
 	if (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD) {
-		for (let coord_str of Game.nextPositions) {
+		for (let coord of Game.nextPositions) {
 
-			if (coord_str == Game.newCardPosition && Game.state == GameState.ROTATE_CARD)
+			if (coord.equals(Game.newCardPosition) && Game.state == GameState.ROTATE_CARD)
 				continue;
 
-			let [coord_x, coord_y] = str_to_coords(coord_str);
 			if (Game.state == GameState.PLACE_CARD) {
 				ctx.strokeStyle = 'red';
 			} else {
@@ -717,20 +804,20 @@ function draw() {
 			ctx.lineJoin = 'round';
 			ctx.setLineDash([8, 4]);
 			ctx.strokeRect(
-				(coord_x - top_x) * (CARD_WIDTH + CARD_SPACING) + 5,
-				(coord_y - top_y) * (CARD_WIDTH + CARD_SPACING) + 5,
+				(coord.x - top_x) * (CARD_WIDTH + CARD_SPACING) + 5,
+				(coord.y - top_y) * (CARD_WIDTH + CARD_SPACING) + 5,
 				CARD_WIDTH - 10,
 				CARD_WIDTH - 10
 			);
 			ctx.lineJoin = 'miter';
 
 			if (Game.state == GameState.PLACE_CARD) {
-				let hitRegionColor = getNewHitRegion(coord_str);
+				let hitRegionColor = getNewHitRegion(coord.toImmutable());
 				hitCtx.fillStyle = hitRegionColor;
 				hitCtx.lineWidth = BORDER_WIDTH / 4;
 				hitCtx.fillRect(
-					(coord_x - top_x) * (CARD_WIDTH + CARD_SPACING) + 5,
-					(coord_y - top_y) * (CARD_WIDTH + CARD_SPACING) + 5,
+					(coord.x - top_x) * (CARD_WIDTH + CARD_SPACING) + 5,
+					(coord.y - top_y) * (CARD_WIDTH + CARD_SPACING) + 5,
 					CARD_WIDTH - 10,
 					CARD_WIDTH - 10
 				);
@@ -742,10 +829,9 @@ function draw() {
 
 	// Draw cards
 
-	for (let [coord_str, card_info] of Game.cards) {
-		let [coord_x, coord_y] = str_to_coords(coord_str);
-		let x = (coord_x - top_x) * (CARD_WIDTH + CARD_SPACING);
-		let y = (coord_y - top_y) * (CARD_WIDTH + CARD_SPACING);
+	for (let [coord, card_info] of Game.cards) {
+		let x = (coord.x - top_x) * (CARD_WIDTH + CARD_SPACING);
+		let y = (coord.y - top_y) * (CARD_WIDTH + CARD_SPACING);
 		drawCard(
 			ctx,
 			card_info[0],
@@ -758,9 +844,9 @@ function draw() {
 	// Draw newly-placed card
 
 	if (Game.state == GameState.ROTATE_CARD) {
-		let [coord_x, coord_y] = str_to_coords(Game.newCardPosition);
-		let x = (coord_x - top_x) * (CARD_WIDTH + CARD_SPACING);
-		let y = (coord_y - top_y) * (CARD_WIDTH + CARD_SPACING);
+		let coord = Game.newCardPosition;
+		let x = (coord.x - top_x) * (CARD_WIDTH + CARD_SPACING);
+		let y = (coord.y - top_y) * (CARD_WIDTH + CARD_SPACING);
 		drawCard(
 			ctx,
 			Game.newCard,
