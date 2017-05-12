@@ -1,23 +1,88 @@
 <!doctype html>
 <html>
   <head>
-    <meta charset="utf-8">
-    <title>LIMES</title>
-    <script src="limes.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/2.4.3/seedrandom.min.js"></script>
+  <meta charset="utf-8">
+  <title>LIMES</title>
+  <script src="limes.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/2.4.3/seedrandom.min.js"></script>
+  <style type="text/css">
+  #canvas {
+    border: 1px solid black;
+    flex-shrink: 0;
+  }
+
+  body {
+    display: flex;
+  }
+
+  #info {
+    margin-left: 20px;
+    margin-top: 20px;
+  }
+
+  #stats {
+    display: inline-block;
+    list-style: none;
+    font-size: 150%;
+    padding-left: 0;
+  }
+
+  #score {
+      font-size: 180%;
+  }
+
+  #supply {
+    font-size: 1.4em;
+  }
+
+  #stats img {
+    height: 1.4em;
+  }
+
+  #instruction {
+    display: block;
+    font-size: 150%;
+  }
+
+  #buttons {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  #buttons button {
+    margin:0 20px 20px 0;
+    -webkit-border-radius: 12;
+    -moz-border-radius: 12;
+    border-radius: 12px;
+    /*font-family: Arial; */
+    color: #000000;
+    font-size: 20px;
+    background: #e4ebf0;
+    padding: 10px 20px 10px 20px;
+    border: solid #1f628d 2px;
+    text-decoration: none;
+  }
+
+  .highlight {
+    border: 5px solid red;
+    margin-left: -5px;
+    margin-top: -5px;
+    border-style: dashed;
+  }
+  </style>
   </head>
   <body>
-  <canvas id="canvas" style="border: 1px solid black; float: left; margin-right: 20px;"></canvas>
-  <div id="info" style="margin-top: 20px;">
+  <canvas id="canvas"></canvas>
+  <div id="info">
     <h1>LIMES</h1>
-    <ul style="list-style: none; font-size: 150%;">
-        <li>Score: <span style="font-size: 180%;" id="score">0</span></li>
-        <li>Supply: <span style="font-size: 140%;" id="supply">0</span> × <img style="font-size: 140%; height: 1em;" src="worker.png"/></li>
+    <ul id="stats">
+        <li>Score: <span id="score">0</span></li>
+        <li id="supply_button">Supply: <span id="supply">0</span> × <img src="worker.png"/></li>
     </ul>
     <div>
-      <span id="instruction" style="display: block; font-size: 150%">Place the card:</span>
+      <span id="instruction">Place the card:</span>
       <canvas id="new_card"></canvas>
-      <div id="buttons"></div>
+      <ul id="buttons"></ul>
     </div>
   </div>
   </body>

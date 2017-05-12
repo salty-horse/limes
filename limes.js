@@ -262,8 +262,6 @@ var Game = {
 		}
 
 		// If the grid origin changed, start panning
-		if (oldX == null)
-			return;
 
 		if (oldX != this.originX || oldY != this.originY) {
 			Game.panSpeedX = (oldX - this.originX) / PANNING_DURATION_MILLIS;
@@ -279,17 +277,17 @@ var Game = {
 	},
 
 	newGame: function() {
-		this.state = GameState.PLACE_CARD;
+		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
 		// card grid size and the minimal values - set by addCard()
-		this.sizeX = 0;
-		this.sizeY = 0;
+		this.sizeX = 1;
+		this.sizeY = 1;
 		this.minX = 0;
 		this.minY = 0;
 
 		// Grid origin, accounting for future placements
-		this.originX = null;
-		this.originY = null;
+		this.originX = -1;
+		this.originY = -1;
 
 		this.panX = 0;
 		this.panY = 0;
@@ -339,11 +337,28 @@ var Game = {
 				}
 			}
 		} else if (this.state == GameState.PLACE_OR_MOVE_WORKER) {
-			document.getElementById('instruction').textContent = 'Place or move a worker:';
-			addHTMLButton('place_worker', 'Place worker');
-			addHTMLButton('move_worker', 'Move worker');
+			let instruction_text;
+
+			if (this.workerSupply > 0 && this.workers.length == 0) {
+				instruction_text = 'Place a worker or continue';
+			} else if (this.workerSupply > 0) {
+				instruction_text = 'Place or move a worker or continue';
+			} else {
+				instruction_text = 'Move a worker or continue';
+			}
+
+			if (this.workerSupply > 0) {
+				var supplyButton = document.getElementById('supply_button');
+				supplyButton.classList.add('highlight');
+				supplyButton.onclick = () => { actionHandler('place_worker'); };
+			}
+
+			document.getElementById('instruction').textContent = instruction_text;
+
+			if (this.cards.size != 1) {
+				addHTMLButton('go_back', 'Undo card placement');
+			}
 			addHTMLButton('skip', this.cards.size != 16 ? 'Draw next card' : 'End game');
-			addHTMLButton('go_back', 'Go back');
 		}
 
 		if (this.state == GameState.GAME_OVER) {
@@ -828,8 +843,8 @@ function draw() {
 	hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
 
 	ctx.translate(
-		Math.floor((-Game.originX + Game.panX) * (CARD_WIDTH + CARD_SPACING)),
-		Math.floor((-Game.originY + Game.panY) * (CARD_WIDTH + CARD_SPACING)),
+		Math.floor((Game.panX - Game.originX) * (CARD_WIDTH + CARD_SPACING)),
+		Math.floor((Game.panY - Game.originY) * (CARD_WIDTH + CARD_SPACING)),
 	);
 
 	// No need to take panning into account because input is disabled while panning
@@ -928,14 +943,14 @@ function draw() {
 	}
 
 	// FIXME: Debug stuff - draw territories
-	for (let territory of Game.territories) {
-		if (!territory.path)
-			continue;
-		let coords = Array.from(territory.zones).join('  ');
-		ctx.strokeStyle = 'red';
-		ctx.lineWidth = '3';
-		ctx.stroke(territory.path);
-	}
+	// for (let territory of Game.territories) {
+	// 	if (!territory.path)
+	// 		continue;
+	// 	let coords = Array.from(territory.zones).join('  ');
+	// 	ctx.strokeStyle = 'red';
+	// 	ctx.lineWidth = '3';
+	// 	ctx.stroke(territory.path);
+	// }
 
 	hitCtx.restore();
 	ctx.restore();
@@ -1099,15 +1114,20 @@ function clearHTMLButtons() {
 	while (elem.firstChild) {
 		elem.removeChild(elem.firstChild);
 	}
+	var supplyButton = document.getElementById('supply_button');
+	supplyButton.classList.remove('highlight');
+	supplyButton.onclick = null;
 }
 
 function addHTMLButton(name, label) {
 	var container = document.getElementById('buttons');
+	var li = document.createElement('li');
 	var button = document.createElement('button');
 	button.type = 'button';
 	button.textContent = label;
 	button.onclick = () => { actionHandler(name); };
-	container.appendChild(button);
+	li.appendChild(button);
+	container.appendChild(li);
 }
 
 // Cards have an array with 4 zones:
