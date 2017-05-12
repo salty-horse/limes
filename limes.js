@@ -10,6 +10,7 @@ const HUT_COLOR = '#5182ad';
 const HUT_WIDTH = Math.round(ZONE_WIDTH / 4);
 const BUTTON_RADIUS = CARD_WIDTH * 0.15;
 const CANVAS_OFFSET = BUTTON_RADIUS * 2 - 10;
+const PANNING_DURATION_MILLIS = 200;
 
 
 class Point {
@@ -140,7 +141,7 @@ class PointSet {
 	}
 }
 
-// Offsets of each zone from card origins.
+// Offsets of each zone from card origin.
 // These are used to identify zone x/y positions.
 const ZONE_ORIGINS = [
 	[
@@ -243,6 +244,38 @@ var Game = {
 				this.nextPositions.push(neighbor);
 			}
 		}
+
+		var oldX = this.originX;
+		var oldY = this.originY;
+
+		// Calculate new grid origin
+		if (this.sizeX < 4) {
+			this.originX = this.minX - 1;
+		} else {
+			this.originX = this.minX;
+		}
+
+		if (this.sizeY < 4) {
+			this.originY = this.minY - 1;
+		} else {
+			this.originY = this.minY;
+		}
+
+		// If the grid origin changed, start panning
+		if (oldX == null)
+			return;
+
+		if (oldX != this.originX || oldY != this.originY) {
+			Game.panSpeedX = (oldX - this.originX) / PANNING_DURATION_MILLIS;
+			Game.panSpeedY = (oldY - this.originY) / PANNING_DURATION_MILLIS;
+
+			Game.panX = (this.originX - oldX);
+			Game.panY = (this.originY - oldY);
+			Game.panStartX = Game.panX;
+			Game.panStartY = Game.panY;
+
+			window.requestAnimationFrame(panCanvas);
+		}
 	},
 
 	newGame: function() {
@@ -253,6 +286,17 @@ var Game = {
 		this.sizeY = 0;
 		this.minX = 0;
 		this.minY = 0;
+
+		// Grid origin, accounting for future placements
+		this.originX = null;
+		this.originY = null;
+
+		this.panX = 0;
+		this.panY = 0;
+		this.panStartX = 0;
+		this.panStartY = 0;
+		this.panStartTime = null;
+
 
 		this.newCard = null;
 		this.newCardPosition = null;
@@ -412,9 +456,6 @@ function actionHandler(action) {
 		Game.newCardPosition = Point.fromImmutable(action);
 		Game.state = GameState.ROTATE_CARD;
 
-		// TODO: If we just finished placing a card, the map jumps to a position.
-		// Add a pan animation between the two positions
-
 	} else if (Game.state == GameState.ROTATE_CARD) {
 		if (action == 'confirm') {
 			Game.addCard(Game.newCardPosition, [Game.newCard, Game.newCardRotation]);
@@ -549,12 +590,12 @@ function parseMap() {
 	calcTerritoryPaths();
 
 
-	console.log(`Territories: ${Game.territories.length}`);
-	for (let territory of Game.territories) {
-		let coords = Array.from(territory.zones).join('  ');
-		let neighborTerritories = Array.from(territory.neighborTerritories).join(' ');
-		console.log(`${territory.id}: { type: ${territory.type}, neighbors: ${neighborTerritories} huts: ${territory.huts}, coords: ${coords} }`);
-	}
+	// console.log(`Territories: ${Game.territories.length}`);
+	// for (let territory of Game.territories) {
+	// 	let coords = Array.from(territory.zones).join('  ');
+	// 	let neighborTerritories = Array.from(territory.neighborTerritories).join(' ');
+	// 	console.log(`${territory.id}: { type: ${territory.type}, neighbors: ${neighborTerritories} huts: ${territory.huts}, coords: ${coords} }`);
+	// }
 }
 
 function* getNeighbors(coords) {
@@ -626,9 +667,8 @@ function getZoneCornersInCanvas(coords) {
 // Calculates a path around each territory
 function calcTerritoryPaths() {
 	for (let territory of Game.territories) {
-		// Size 1 territories are easiest
+		// Size 1 territories are simple
 		if (territory.zones.size == 1) {
-			console.log(`territory ${territory.id} is size 1`);
 			let zoneCorners = getZoneCornersInCanvas(territory.zones.values().next().value);
 			let p = new Path2D();
 			p.moveTo(zoneCorners[0][0], zoneCorners[0][1]);
@@ -747,6 +787,33 @@ function calcTerritoryPaths() {
 	}
 }
 
+function panCanvas(timestamp) {
+	if (Game.panStartTime == null) {
+		Game.panStartTime = timestamp;
+	}
+
+	var t = timestamp - Game.panStartTime;
+
+	Game.panX = Game.panStartX + Game.panSpeedX * t;
+	Game.panY = Game.panStartY + Game.panSpeedY * t;
+
+	if (Game.panSpeedX > 0 && Game.panX > 0 ||
+	    Game.panSpeedX < 0 && Game.panX < 0 ||
+	    Game.panSpeedY > 0 && Game.panY > 0 ||
+	    Game.panSpeedY < 0 && Game.panY < 0) {
+		Game.panX = 0;
+		Game.panY = 0;
+		Game.panStartX = 0;
+		Game.panStartY = 0;
+		Game.panStartTime = null;
+		draw();
+		return;
+	}
+
+	draw();
+	window.requestAnimationFrame(panCanvas);
+}
+
 function draw() {
 
 	hitRegions = {};
@@ -754,39 +821,26 @@ function draw() {
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
 	hitCtx.clearRect(0, 0, canvas.width, canvas.height);
 
-	// Calculate map origin, leaving room for 1 new card above and to the left
-	var number_coords = [];
-	for (let coord of Game.cards.keys()) {
-		number_coords.push(coord);
-	}
-	var x_coords = number_coords.map(coords => coords.x);
-	var y_coords = number_coords.map(coords => coords.y);
-	var min_x = Math.min.apply(null, x_coords);
-	var min_y = Math.min.apply(null, y_coords);
-	var max_x = Math.max.apply(null, x_coords);
-	var max_y = Math.max.apply(null, y_coords);
-
-	var top_x, top_y;
-	if (max_x - min_x < 3) {
-		top_x = min_x - 1;
-	} else {
-		top_x = min_x;
-	}
-
-	if (max_y - min_y < 3) {
-		top_y = min_y - 1;
-	} else {
-		top_y = min_y;
-	}
-
 	ctx.save();
 	hitCtx.save();
 
 	ctx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
 	hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
 
+	ctx.translate(
+		Math.floor((-Game.originX + Game.panX) * (CARD_WIDTH + CARD_SPACING)),
+		Math.floor((-Game.originY + Game.panY) * (CARD_WIDTH + CARD_SPACING)),
+	);
+
+	// No need to take panning into account because input is disabled while panning
+	hitCtx.translate(
+		-Game.originX * (CARD_WIDTH + CARD_SPACING),
+		-Game.originY * (CARD_WIDTH + CARD_SPACING)
+	);
+
 	// Draw future placement positions
-	if (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD) {
+	if (Game.panX == 0 && Game.panY == 0 &&
+	    (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD)) {
 		for (let coord of Game.nextPositions) {
 
 			if (coord.equals(Game.newCardPosition) && Game.state == GameState.ROTATE_CARD)
@@ -801,8 +855,8 @@ function draw() {
 			ctx.lineJoin = 'round';
 			ctx.setLineDash([8, 4]);
 			ctx.strokeRect(
-				(coord.x - top_x) * (CARD_WIDTH + CARD_SPACING) + 5,
-				(coord.y - top_y) * (CARD_WIDTH + CARD_SPACING) + 5,
+				coord.x * (CARD_WIDTH + CARD_SPACING) + 5,
+				coord.y * (CARD_WIDTH + CARD_SPACING) + 5,
 				CARD_WIDTH - 10,
 				CARD_WIDTH - 10
 			);
@@ -813,8 +867,8 @@ function draw() {
 				hitCtx.fillStyle = hitRegionColor;
 				hitCtx.lineWidth = BORDER_WIDTH / 4;
 				hitCtx.fillRect(
-					(coord.x - top_x) * (CARD_WIDTH + CARD_SPACING) + 5,
-					(coord.y - top_y) * (CARD_WIDTH + CARD_SPACING) + 5,
+					coord.x * (CARD_WIDTH + CARD_SPACING) + 5,
+					coord.y * (CARD_WIDTH + CARD_SPACING) + 5,
 					CARD_WIDTH - 10,
 					CARD_WIDTH - 10
 				);
@@ -827,8 +881,8 @@ function draw() {
 	// Draw cards
 
 	for (let [coord, card_info] of Game.cards) {
-		let x = (coord.x - top_x) * (CARD_WIDTH + CARD_SPACING);
-		let y = (coord.y - top_y) * (CARD_WIDTH + CARD_SPACING);
+		let x = coord.x * (CARD_WIDTH + CARD_SPACING);
+		let y = coord.y * (CARD_WIDTH + CARD_SPACING);
 		drawCard(
 			ctx,
 			card_info[0],
@@ -842,8 +896,8 @@ function draw() {
 
 	if (Game.state == GameState.ROTATE_CARD) {
 		let coord = Game.newCardPosition;
-		let x = (coord.x - top_x) * (CARD_WIDTH + CARD_SPACING);
-		let y = (coord.y - top_y) * (CARD_WIDTH + CARD_SPACING);
+		let x = coord.x * (CARD_WIDTH + CARD_SPACING);
+		let y = coord.y * (CARD_WIDTH + CARD_SPACING);
 		drawCard(
 			ctx,
 			Game.newCard,
@@ -874,16 +928,6 @@ function draw() {
 	}
 
 	// FIXME: Debug stuff - draw territories
-	ctx.save();
-	hitCtx.save();
-	ctx.translate(
-		(0 - top_x) * (CARD_WIDTH + CARD_SPACING),
-		(0 - top_y) * (CARD_WIDTH + CARD_SPACING)
-	);
-	hitCtx.translate(
-		(0 - top_x) * (CARD_WIDTH + CARD_SPACING),
-		(0 - top_y) * (CARD_WIDTH + CARD_SPACING)
-	);
 	for (let territory of Game.territories) {
 		if (!territory.path)
 			continue;
@@ -892,11 +936,6 @@ function draw() {
 		ctx.lineWidth = '3';
 		ctx.stroke(territory.path);
 	}
-	hitCtx.restore();
-	ctx.restore();
-
-
-
 
 	hitCtx.restore();
 	ctx.restore();
