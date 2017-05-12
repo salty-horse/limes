@@ -568,7 +568,7 @@ function calcTerritoryPaths() {
 				start_coord = [min_x, y];
 			}
 		}
-		console.log(`territory ${territory.id} start coord is ${start_coord}`);
+		console.log(`#################### territory ${territory.id} start coord is ${start_coord} #######################`);
 
 		let startCorners = getZoneCornersInCanvas(coord_to_str(start_coord));
 
@@ -576,6 +576,8 @@ function calcTerritoryPaths() {
 		var p = new Path2D();
 		p.moveTo(startCorners[3][0], startCorners[3][1]);
 		p.lineTo(startCorners[0][0], startCorners[0][1]);
+		console.log(`p.moveTo(${startCorners[3][0]}, ${startCorners[3][1]});`);
+		console.log(`p.lineTo(${startCorners[0][0]}, ${startCorners[0][1]});`);
 
 		let direction = 1;
 		let curr_coord = start_coord;
@@ -584,54 +586,56 @@ function calcTerritoryPaths() {
 		// Start by moving left
 		let next_coord = [start_coord[0] + 1, start_coord[1]];
 
-		console.log(`next coord is ${next_coord}`);
-
-		while (start_coord[0] != next_coord[0] || start_coord[1] != next_coord[1]) {
+		do {
+			// console.log(`next coord is ${next_coord}`);
 			if (territory.zones.has(coord_to_str(next_coord))) {
 				if (!curr_coord_in_territory) {
 					// Going from outside in.
-					// Add the RIGHT corner of the new zone to the path.
-					console.log(`gone from outside in. adding RIGHT corner of next coordinate ${(direction + 1) % 4}`);
+
+					// Look to the right of the new zone. If it's inside the territory, mark its back left corner
+					let left_zone;
+					if (direction == 0) {
+						left_zone = [next_coord[0] + 1, next_coord[1]];
+					} else if (direction == 1) {
+						left_zone = [next_coord[0], next_coord[1] + 1];
+					} else if (direction == 2) {
+						left_zone = [next_coord[0] - 1, next_coord[1]];
+					} else if (direction == 3) {
+						left_zone = [next_coord[0], next_coord[1] - 1];
+					}
+					if (territory.zones.has(coord_to_str(left_zone))) {
+						let corners = getZoneCornersInCanvas(coord_to_str(left_zone));
+						let corner = corners[(direction + 3) % 4];
+						p.lineTo(corner[0], corner[1]);
+						console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
+					}
+
+					// Add the BACK RIGHT corner of the new zone to the path.
 					let corners = getZoneCornersInCanvas(coord_to_str(next_coord));
 					let corner = corners[(direction + 2) % 4];
 					p.lineTo(corner[0], corner[1]);
-
-					// Add the LEFT corner of the new zone to the path.
-					corners = getZoneCornersInCanvas(coord_to_str(next_coord));
-					corner = corners[(direction + 3) % 4];
-					p.lineTo(corner[0], corner[1]);
+					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				} else {
 					// Staying inside.
-					// Add the LEFT corner of the old zone to the path
+					// Add the FRONT LEFT corner of the old zone to the path
 					let corners = getZoneCornersInCanvas(coord_to_str(curr_coord));
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
-
-					// Add the LEFT corner of the new zone to the path
-					console.log(`staying inside. adding LEFT corner of next coordinate ${(direction + 3) % 4}`);
-					corners = getZoneCornersInCanvas(coord_to_str(next_coord));
-					corner = corners[(direction + 3) % 4];
-					p.lineTo(corner[0], corner[1]);
+					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				}
 
 				curr_coord_in_territory = true;
 
 				// Turn left
-				direction = (direction + 3) % 4
+				direction = (direction + 3) % 4;
 			} else {
 				if (curr_coord_in_territory) {
 					// Going from inside out.
-					// Add the LEFT corner of the current zone to the path
-					console.log(`gone from inside out. adding LEFT corner of current coordinate ${direction}`);
+					// Add the FRONT LEFT corner of the current zone to the path
 					let corners = getZoneCornersInCanvas(coord_to_str(curr_coord));
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
-
-					// Add the RIGHT corner of the current zone to the path
-					console.log(`Also adding RIGHT corner of current coordinate ${(direction + 1) % 4}`);
-					corners = getZoneCornersInCanvas(coord_to_str(curr_coord));
-					corner = corners[(direction + 1) % 4];
-					p.lineTo(corner[0], corner[1]);
+					console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				}
 
 				curr_coord_in_territory = false;
@@ -651,8 +655,7 @@ function calcTerritoryPaths() {
 			} else if (direction == 3) {
 				next_coord = [curr_coord[0] - 1, curr_coord[1]];
 			}
-			console.log(`next coord is ${next_coord}`);
-		}
+		} while (start_coord[0] != curr_coord[0] || start_coord[1] != curr_coord[1]);
 
 		p.closePath();
 		territory.path = p;
