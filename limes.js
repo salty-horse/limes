@@ -176,6 +176,14 @@ let WORKER_X;
 let WORKER_Y;
 
 
+let alphabet = '3467890BCDFGHJKMPQRTVWXYbcdfghjkmpqrtvwxy';
+function getRandomString() {
+	let chars = [];
+	for (let i = 0; i < 6; i++) {
+		chars.push(alphabet[Math.floor(Math.random() * alphabet.length)]);
+	}
+	return chars.join('');
+}
 
 function getNewHitRegion(name) {
 	while (true) {
@@ -285,7 +293,7 @@ let Game = {
 		}
 	},
 
-	newGame: function() {
+	newGame: function(seed) {
 		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
 		// card grid size and the minimal values - set by addCard()
@@ -324,13 +332,21 @@ let Game = {
 		this.selectedTerritory = null;
 		this.selectedWorker = null;
 
+		if (!seed) {
+			seed = getRandomString();
+		}
+
 		this.cardDeck = Object.keys(CARDS);
-		this.cardRNG = new Math.seedrandom('test_game');
+		this.cardRNG = new Math.seedrandom(seed);
 
 		this.cards = new PointMap();
 		this.nextPositions = [];
 
 		this.targetTerritories = new Set();
+
+		document.getElementById('game_id').textContent = seed;
+		document.getElementById('share_link').value =
+			[location.protocol, '//', location.host, location.pathname, '?' + seed].join('');
 
 
 		// Draw new card
@@ -338,6 +354,9 @@ let Game = {
 		this.addCard(new Point(0, 0), [this.cardDeck[ix], 0]);
 		this.cardDeck.splice(ix, 1);
 		this.updateUI();
+
+		parseMap();
+		draw();
 	},
 
 	// Updates HTML
@@ -525,8 +544,7 @@ let Game = {
 	},
 }
 
-
-window.addEventListener('load', function() {
+window.addEventListener('DOMContentLoaded', function() {
 	canvas = document.getElementById('canvas');
 	canvas.width = canvas.height = CARD_WIDTH * 5 + CANVAS_OFFSET * 2 + 10;
 	ctx = canvas.getContext('2d');
@@ -561,6 +579,48 @@ window.addEventListener('load', function() {
 	WORKER_Y = Math.floor((ZONE_WIDTH - WORKER_HEIGHT) / 2);
 	WORKER_OUTLINE_ORIGIN = Math.min(WORKER_X, WORKER_Y) - 4;
 
+	canvas.addEventListener('click', function(e) {
+		const rect = canvas.getBoundingClientRect();
+		const x = e.clientX - rect.left;
+		const y = e.clientY - rect.top;
+
+		const pixel = hitCtx.getImageData(x, y, 1, 1).data;
+		const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
+		const clickRegion = hitRegions[color];
+		if (!clickRegion) {
+			return;
+		}
+
+		actionHandler(clickRegion);
+	});
+
+	// Enable buttons
+
+	document.getElementById('copy_button').onclick = function() {
+		document.getElementById('share_link').select();
+		document.execCommand('copy');
+	}
+
+	let seed = undefined;
+	if (location.search) {
+		seed = location.search.substring(1);
+	}
+
+	// Remove search query from URL
+	let url = [location.protocol, '//', location.host, location.pathname].join('');
+	if (location.search) {
+		window.history.replaceState(null, '', url);
+	}
+
+	document.getElementById('new_game').onclick = function() {
+		if (Game.state != GameState.GAME_OVER) {
+			if (!window.confirm('Are you sure you wish to start a new game?')) {
+				return;
+			}
+		}
+		Game.newGame();
+	}
+
 	// let allCards = {
 	// 	'0,0': [1, 0],
 	// 	'1,0': [2, 0],
@@ -589,43 +649,7 @@ window.addEventListener('load', function() {
 	// };
 	// Game.addCards(allCards);
 
-	// Game.addCards({
-		// '0,0': [1, 0],
-		// '1,0': [7, 2],
-		// '2,0': [6, 3],
-		// '3,0': [22, 0],
-		// '0,1': [5, 0],
-		// '1,1': [19, 3],
-		// '2,1': [12, 0],
-		// '3,1': [14, 0],
-		// '0,2': [9, 3],
-		// '1,2': [4, 0],
-		// '2,2': [23, 1],
-		// '3,2': [3, 1],
-		// '0,3': [24, 3],
-		// '1,3': [8, 0],
-		// '2,3': [10, 3],
-		// '3,3': [20, 2],
-	// });
-
-	Game.newGame();
-	parseMap();
-	draw();
-
-	canvas.addEventListener('click', function(e) {
-		const rect = canvas.getBoundingClientRect();
-		const x = e.clientX - rect.left;
-		const y = e.clientY - rect.top;
-
-		const pixel = hitCtx.getImageData(x, y, 1, 1).data;
-		const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
-		const clickRegion = hitRegions[color];
-		if (!clickRegion) {
-			return;
-		}
-
-		actionHandler(clickRegion);
-	});
+	Game.newGame(seed);
 });
 
 // Handles action caused by button presses (HTML buttons or canvas)
@@ -810,8 +834,6 @@ function parseMap() {
 		addCardToGrid(Game.newCardPosition, Game.newCard, Game.newCardRotation);
 	}
 
-	debugPrintZoneGrid(zoneGrid);
-
 	// Collect zones into territories
 	Game.territories = [];
 	Game.zoneTerritories = new PointMap();
@@ -871,13 +893,6 @@ function parseMap() {
 			territory.neighborTerritories.add(Game.zoneTerritories.get(zone));
 		}
 	}
-
-	// console.log(`Territories: ${Game.territories.length}`);
-	// for (let territory of Game.territories) {
-	// 	let coords = Array.from(territory.zones).join('  ');
-	// 	let neighborTerritories = Array.from(territory.neighborTerritories).join(' ');
-	// 	console.log(`${territory.id}: { type: ${territory.type}, neighbors: ${neighborTerritories} huts: ${territory.huts}, coords: ${coords} }`);
-	// }
 }
 
 function* getNeighbors(coords) {
@@ -945,8 +960,6 @@ class Territory {
 
 		let start_coord = this.topLeftZone;
 
-		// console.log(`territory ${this.id} start coord is ${start_coord}`);
-
 		let startCorners = getZoneCornersInCanvas(start_coord);
 
 		// The left side of the zone forms the initial path
@@ -954,8 +967,6 @@ class Territory {
 		this._path = p;
 		p.moveTo(startCorners[3][0], startCorners[3][1]);
 		p.lineTo(startCorners[0][0], startCorners[0][1]);
-		// console.log(`p.moveTo(${startCorners[3][0]}, ${startCorners[3][1]});`);
-		// console.log(`p.lineTo(${startCorners[0][0]}, ${startCorners[0][1]});`);
 
 		let direction = 1;
 		let curr_coord = start_coord;
@@ -965,7 +976,6 @@ class Territory {
 		let next_coord = new Point(start_coord.x + 1, start_coord.y);
 
 		do {
-			// console.log(`next coord is ${next_coord}`);
 			if (this.zones.has(next_coord)) {
 				if (!curr_coord_in_territory) {
 					// Going from outside in.
@@ -985,21 +995,18 @@ class Territory {
 						let corners = getZoneCornersInCanvas(left_zone);
 						let corner = corners[(direction + 3) % 4];
 						p.lineTo(corner[0], corner[1]);
-						// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 					}
 
 					// Add the BACK RIGHT corner of the new zone to the path.
 					let corners = getZoneCornersInCanvas(next_coord);
 					let corner = corners[(direction + 2) % 4];
 					p.lineTo(corner[0], corner[1]);
-					// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				} else {
 					// Staying inside.
 					// Add the FRONT LEFT corner of the old zone to the path
 					let corners = getZoneCornersInCanvas(curr_coord);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
-					// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				}
 
 				curr_coord_in_territory = true;
@@ -1013,7 +1020,6 @@ class Territory {
 					let corners = getZoneCornersInCanvas(curr_coord);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
-					// console.log(`p.lineTo(${corner[0]}, ${corner[1]});`);
 				}
 
 				curr_coord_in_territory = false;
@@ -1038,25 +1044,6 @@ class Territory {
 		p.closePath();
 
 		return p;
-	}
-}
-
-function debugPrintZoneGrid(zoneGrid) {
-	let number_coords = Object.keys(zoneGrid).map(Point.fromImmutable);
-	let x_coords = number_coords.map(pos => pos[0]);
-	let y_coords = number_coords.map(pos => pos[1]);
-	let min_x = Math.min.apply(null, x_coords);
-	let min_y = Math.min.apply(null, y_coords);
-	let max_x = Math.max.apply(null, x_coords);
-	let max_y = Math.max.apply(null, y_coords);
-
-	for (let i = min_y; i <= max_y; i++) {
-		let row = [];
-		for (let j = min_x; j <= max_x; j++) {
-			let val = zoneGrid[new Point(j, i).toImmutable()];
-			row.push(val ? `${i},${j} ${val[0]}${val[1]}${val[2]}${val[3]}${val[4]}` : ' ');
-		}
-		console.log(row.join(' '));
 	}
 }
 

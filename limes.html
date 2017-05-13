@@ -17,14 +17,16 @@
 
   #info {
     margin-left: 20px;
-    margin-top: 20px;
   }
 
   #stats {
-    display: inline-block;
     list-style: none;
     font-size: 150%;
     padding-left: 0;
+  }
+
+  #supply_button {
+    display: inline-block;
   }
 
   #score, #new_points {
@@ -51,6 +53,7 @@
   #instruction {
     display: block;
     font-size: 150%;
+    margin-top: 2em;
   }
 
   #buttons {
@@ -79,12 +82,28 @@
     margin-bottom: -5px;
     border-style: dashed;
   }
+
+  .copywrapper {
+    display: inline-block;
+  }
+
+  #game_id {
+    font-weight: bold;
+    font-size: 110%;
+  }
+
+  #share_link {
+  }
+
   </style>
   </head>
   <body>
   <canvas id="canvas"></canvas>
   <div id="info">
     <h1>LIMES</h1>
+    Game ID: <span id="game_id"></span>
+    <div class="copywrapper"><button id="copy_button">Copy link for sharing</button><input id="share_link" type="text" onfocus="this.select()" readonly=""></div>
+    <div><button id="new_game">New Game</button></div>
     <ul id="stats">
         <li>Score: <span id="score">0</span> <span id="new_points"></span></li>
         <li id="supply_button">Supply: <span id="supply">0</span> × <img id="worker_image" src="worker.png"/></li>
