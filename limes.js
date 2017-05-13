@@ -1,6 +1,6 @@
 'use strict';
 
-const CARD_WIDTH = 180; // TODO: The border isn't part of the card size. Visible in the next card view
+const CARD_WIDTH = 180;
 const CARD_SPACING = 2;
 const BORDER_WIDTH = 8;
 const INNER_BORDER_WIDTH = 2;
@@ -165,8 +165,15 @@ const ZONE_ORIGINS = [
 var canvas, ctx;
 var hitCanvas, hitCtx;
 var newCardCanvas, newCardCtx;
-var workerImage;
 var hitRegions = {};
+
+var workerImage;
+var WORKER_WIDTH;
+var WORKER_HEIGHT;
+var WORKER_X;
+var WORKER_Y;
+
+
 
 function getNewHitRegion(name) {
 	while (true) {
@@ -297,17 +304,23 @@ var Game = {
 
 
 		this.newCard = null;
-		this.newCardPosition = null;
+		this.newCardPosition = new Point(0, 0);
 		this.newCardRotation = 0;
 
 		this.workerSupply = 7;
-		this.workers = []; // Zones the workers are on
+
+		// Zones the workers are on.
+		this.workers = [];
+
+		this.selectedTerritory = null;
 
 		this.cardDeck = Object.keys(CARDS);
 		this.cardRNG = new Math.seedrandom('test_game');
 
 		this.cards = new PointMap();
 		this.nextPositions = [];
+
+		this.targetTerritories = new Set();
 
 		// Draw new card
 		let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
@@ -318,6 +331,8 @@ var Game = {
 
 	update: function() {
 		clearHTMLButtons();
+
+		let instruction_label = document.getElementById('instruction');
 
 		if (this.state == GameState.PLACE_CARD) {
 			if (this.newCard == null) {
@@ -332,7 +347,7 @@ var Game = {
 
 					// Draw card onto mini-canvas
 					drawCard(newCardCtx, this.newCard, 0, 0, 0);
-					document.getElementById('instruction').textContent = 'Place the card:';
+					instruction_label.textContent = 'Place the card:';
 					clearHTMLButtons();
 				}
 			}
@@ -353,18 +368,34 @@ var Game = {
 				supplyButton.onclick = () => { actionHandler('place_worker'); };
 			}
 
-			document.getElementById('instruction').textContent = instruction_text;
+			instruction_label.textContent = instruction_text;
 
 			if (this.cards.size != 1) {
 				addHTMLButton('go_back', 'Undo card placement');
 			}
 			addHTMLButton('skip', this.cards.size != 16 ? 'Draw next card' : 'End game');
+
+		} else if (this.state == GameState.PLACE_WORKER) {
+			if (this.selectedTerritory) {
+				instruction_label = 'Undo or continue';
+
+				addHTMLButton('cancel', 'Undo worker placement');
+				addHTMLButton('confirm', 'Draw next card');
+			} else {
+				instruction_label.textContent = 'Select a territory to place the worker in';
+
+				// Mark the territories on the placed card as selectable
+				for (let pos of getCardZones(this.newCardPosition)) {
+					this.targetTerritories.add(this.zoneTerritories.get(pos));
+				}
+
+				addHTMLButton('cancel', 'Undo worker placement');
+			}
 		}
 
 		if (this.state == GameState.GAME_OVER) {
-			document.getElementById('instruction').textContent = 'Game over! TODO: Score summary';
+			instruction_label.textContent = 'Game over! TODO: Score summary';
 		}
-
 
 		// Update HTML
 		if (this.state == GameState.PLACE_CARD) {
@@ -395,8 +426,22 @@ window.addEventListener('load', function() {
 	newCardCanvas.height = CARD_WIDTH;
 	newCardCtx = newCardCanvas.getContext('2d');
 
-	workerImage = new Image();
-	workerImage.source = 'worker.png';
+	workerImage = document.getElementById('worker_image');
+
+	// Pre-calculate how to draw the worker on the map
+	let worker_side = ZONE_WIDTH - HUT_WIDTH * 2;
+	if (workerImage.naturalWidth > workerImage.naturalHeight) {
+		WORKER_WIDTH = worker_side;
+		WORKER_HEIGHT = Math.floor(workerImage.naturalHeight * (worker_side / workerImage.naturalWidth));
+	} else if (workerImage.naturalHeight > workerImage.naturalWidth) {
+		WORKER_HEIGHT = worker_side;
+		WORKER_WIDTH = Math.floor(workerImage.naturalWidth * (worker_side / workerImage.naturalHeight));
+	} else {
+		WORKER_WIDTH = worker_side;
+		WORKER_HEIGHT = worker_side;
+	}
+	WORKER_X = Math.floor((ZONE_WIDTH - WORKER_WIDTH) / 2);
+	WORKER_Y = Math.floor((ZONE_WIDTH - WORKER_HEIGHT) / 2);
 
 	// var allCards = {
 	// 	'0,0': [1, 0],
@@ -489,8 +534,12 @@ function actionHandler(action) {
 			Game.newCardRotation = (Game.newCardRotation + 1) % 4;
 		}
 	} else if (Game.state == GameState.PLACE_OR_MOVE_WORKER) {
+		Game.selectedTerritory = null;
+
 		if (action == 'place_worker') {
+			Game.state = GameState.PLACE_WORKER;
 		} else if (action == 'move_worker') {
+			Game.state = GameState.MOVE_WORKER;
 		} else if (action == 'skip') {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
@@ -499,11 +548,64 @@ function actionHandler(action) {
 			Game.state = GameState.PLACE_CARD;
 			Game.removeCard(Game.newCardPosition);
 		}
+	} else if (Game.state == GameState.PLACE_WORKER) {
+		if (action == 'cancel') {
+			if (Game.selectedTerritory) {
+				Game.selectedTerritory = null;
+				Game.workerSupply++;
+				Game.workers.pop();
+			}
+			Game.targetTerritories.clear();
+			Game.state = GameState.PLACE_OR_MOVE_WORKER;
+		} else if (action == 'confirm') {
+			Game.targetTerritories.clear();
+			Game.selectedTerritory = null;
+			Game.state = GameState.PLACE_CARD;
+			Game.newCard = null;
+			Game.newCardRotation = 0;
+		} else {
+			// A territory was chosen
+			Game.selectedTerritory = Game.territories[action];
+			Game.workerSupply--;
+			let existingWorkerZone = findWorkerInTerritory(Game.selectedTerritory);
+
+			// Place the worker in the territory
+			if (existingWorkerZone) {
+				// Reuse an existing worker position
+				Game.workers.push(existingWorkerZone);
+			} else {
+				// Pick the first zone of the current card
+				for (let pos of getCardZones(Game.newCardPosition)) {
+					if (Game.selectedTerritory.zones.has(pos)) {
+						Game.workers.push(pos);
+						break;
+					}
+				}
+			}
+			Game.targetTerritories.clear();
+		}
 	}
 
 	Game.update();
 	parseMap(); // TODO: In some cases we don't need to call this
 	draw();
+}
+
+
+function* getCardZones(card_pos) {
+	yield new Point(card_pos.x * 2, card_pos.y * 2);
+	yield new Point(card_pos.x * 2 + 1, card_pos.y * 2);
+	yield new Point(card_pos.x * 2, card_pos.y * 2 + 1);
+	yield new Point(card_pos.x * 2 + 1, card_pos.y * 2 + 1);
+}
+
+function findWorkerInTerritory(territory) {
+	for (let worker_pos of Game.workers) {
+		if (territory.zones.has(worker_pos)) {
+			return worker_pos;
+		}
+	}
+	return null;
 }
 
 function parseMap() {
@@ -543,7 +645,7 @@ function parseMap() {
 
 	// Collect zones into territories
 	Game.territories = [];
-	Game.zone_territories = new PointMap();
+	Game.zoneTerritories = new PointMap();
 	var unscanned_coords = new PointSet();
 
 	// Collect all towers, which are a territory on their own
@@ -551,7 +653,7 @@ function parseMap() {
 		if (zone_info[0] == 'T') {
 			let territory = new Territory(Game.territories.length, coords, 'T');
 			Game.territories.push(territory);
-			Game.zone_territories.set(coords, territory.id);
+			Game.zoneTerritories.set(coords, territory.id);
 			for (let [neighbor, ] of getNeighbors(coords)) {
 				if (zoneGrid.has(neighbor)) {
 					territory.neighbors.add(neighbor);
@@ -568,7 +670,7 @@ function parseMap() {
 		unscanned_coords.delete(coords);
 		let territory = new Territory(Game.territories.length, coords, zoneGrid.get(coords)[0]);
 		Game.territories.push(territory);
-		Game.zone_territories.set(coords, territory.id);
+		Game.zoneTerritories.set(coords, territory.id);
 
 		// Explore the new territory
 		var coords_to_explore = new PointSet();
@@ -579,7 +681,7 @@ function parseMap() {
 			for (let [neighbor, direction] of getNeighbors(coords)) {
 				if (unscanned_coords.has(neighbor) && zoneGrid.get(neighbor)[0] == territory.type) {
 					territory.zones.add(neighbor);
-					Game.zone_territories.set(neighbor, territory.id);
+					Game.zoneTerritories.set(neighbor, territory.id);
 					unscanned_coords.delete(neighbor);
 					coords_to_explore.add(neighbor);
 				} else if (zoneGrid.has(neighbor)) {
@@ -597,7 +699,7 @@ function parseMap() {
 	// Build list of adjacent territories
 	for (let territory of Game.territories) {
 		for (let zone of territory.neighbors) {
-			territory.neighborTerritories.add(Game.zone_territories.get(zone));
+			territory.neighborTerritories.add(Game.zoneTerritories.get(zone));
 		}
 	}
 
@@ -632,8 +734,8 @@ function Territory(id, zone, type) {
 
 function debugPrintZoneGrid(zoneGrid) {
 	var number_coords = Object.keys(zoneGrid).map(Point.fromImmutable);
-	var x_coords = number_coords.map(coords => coords[0]);
-	var y_coords = number_coords.map(coords => coords[1]);
+	var x_coords = number_coords.map(pos => pos[0]);
+	var y_coords = number_coords.map(pos => pos[1]);
 	var min_x = Math.min.apply(null, x_coords);
 	var min_y = Math.min.apply(null, y_coords);
 	var max_x = Math.max.apply(null, x_coords);
@@ -651,13 +753,13 @@ function debugPrintZoneGrid(zoneGrid) {
 
 // Asssuming the card grid is drawn from 0,0,
 // gets the positions of the 4 corners [NW, NE, SE, SW]
-function getZoneCornersInCanvas(coords) {
-	var cardX = Math.floor(coords.x / 2);
-	var cardY = Math.floor(coords.y / 2);
+function getZoneCornersInCanvas(pos) {
+	var cardX = Math.floor(pos.x / 2);
+	var cardY = Math.floor(pos.y / 2);
 	var canvasCardX = cardX * (CARD_WIDTH + CARD_SPACING);
 	var canvasCardY = cardY * (CARD_WIDTH + CARD_SPACING);
-	var modX = Math.abs(coords.x % 2);
-	var modY = Math.abs(coords.y % 2);
+	var modX = Math.abs(pos.x % 2);
+	var modY = Math.abs(pos.y % 2);
 	var zoneQuad;
 
 	if (modX == 0 && modY == 0) {
@@ -853,7 +955,7 @@ function draw() {
 		-Game.originY * (CARD_WIDTH + CARD_SPACING)
 	);
 
-	// Draw future placement positions
+	// Draw placement positions
 	if (Game.panX == 0 && Game.panY == 0 &&
 	    (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD)) {
 		for (let coord of Game.nextPositions) {
@@ -907,6 +1009,45 @@ function draw() {
 		);
 	}
 
+	// Draw workers
+	let worker_counts = {};
+	for (let worker_pos of Game.workers) {
+		console.log(worker_pos);
+		let s = worker_pos.toImmutable();
+		if (worker_counts[s]) {
+			worker_counts[s] += 1;
+		} else {
+			worker_counts[s] = 1;
+		}
+	}
+
+	for (let worker_pos in worker_counts) {
+		let count = worker_counts[worker_pos];
+		let pos = Point.fromImmutable(worker_pos);
+		let zoneOrigin = getZoneCornersInCanvas(pos)[0];
+		console.log(zoneOrigin);
+		ctx.drawImage(workerImage,
+			zoneOrigin[0] + WORKER_X,
+			zoneOrigin[1] + WORKER_Y,
+			WORKER_WIDTH,
+			WORKER_HEIGHT
+		);
+		if (count > 1) {
+			ctx.font = (CARD_WIDTH * 0.1).toString() + 'px serif';
+			ctx.textAlign = 'center';
+			ctx.textBaseline = 'middle';
+			ctx.shadowColor = 'grey';
+			ctx.shadowBlur = 10;
+			ctx.fillStyle = 'white';
+			let center = Math.floor(ZONE_WIDTH / 2);
+			ctx.fillText(
+				count,
+				zoneOrigin[0] + center,
+				zoneOrigin[1] + center);
+		}
+	}
+	ctx.shadowBlur = 0;
+
 	// Draw newly-placed card
 
 	if (Game.state == GameState.ROTATE_CARD) {
@@ -942,15 +1083,31 @@ function draw() {
 		ctx.restore();
 	}
 
-	// FIXME: Debug stuff - draw territories
-	// for (let territory of Game.territories) {
-	// 	if (!territory.path)
-	// 		continue;
-	// 	let coords = Array.from(territory.zones).join('  ');
-	// 	ctx.strokeStyle = 'red';
-	// 	ctx.lineWidth = '3';
-	// 	ctx.stroke(territory.path);
-	// }
+	// Draw territories
+
+	ctx.save()
+
+	// TODO: Use scale to make the territory outlines smaller
+
+	ctx.lineWidth = 4;
+	ctx.lineJoin = 'round';
+	ctx.strokeStyle = 'red';
+	ctx.setLineDash([8, 4]);
+
+	for (let terId of Game.targetTerritories) {
+		let territory = Game.territories[terId];
+		if (!territory.path)
+			continue;
+		let coords = Array.from(territory.zones).join('  ');
+		ctx.stroke(territory.path);
+
+		let hitRegionColor = getNewHitRegion(terId.toString());
+		hitCtx.fillStyle = hitRegionColor;
+		hitCtx.lineWidth = 4;
+		hitCtx.fill(territory.path);
+	}
+
+	ctx.restore();
 
 	hitCtx.restore();
 	ctx.restore();
@@ -1021,7 +1178,7 @@ function drawCard(ctx, num, rot, x, y) {
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
 	ctx.fillStyle = 'black';
-	var card_str = num.toString();
+	let card_str = num.toString();
 	if (num == 6 || num == 9) {
 		card_str += '.';
 	}
