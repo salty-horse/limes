@@ -770,10 +770,6 @@ function parseMap() {
 		}
 	}
 
-	// TODO: Move this away. Only calc when need to place meeple
-	calcTerritoryPaths();
-
-
 	// console.log(`Territories: ${Game.territories.length}`);
 	// for (let territory of Game.territories) {
 	// 	let coords = Array.from(territory.zones).join('  ');
@@ -789,107 +785,71 @@ function* getNeighbors(coords) {
 	yield [new Point(coords.x - 1, coords.y), 3];
 }
 
-function Territory(id, zone, type) {
-	this.id = id;
-	this.type = type;
-	this.zones = new PointSet();
-	this.zones.add(zone)
-	this.neighbors = new PointSet();
-	this.neighborTerritories = new Set();
-	this.huts = 0;
-	this.path = null;
-	this.topLeftZone = null;
-}
-
-function debugPrintZoneGrid(zoneGrid) {
-	let number_coords = Object.keys(zoneGrid).map(Point.fromImmutable);
-	let x_coords = number_coords.map(pos => pos[0]);
-	let y_coords = number_coords.map(pos => pos[1]);
-	let min_x = Math.min.apply(null, x_coords);
-	let min_y = Math.min.apply(null, y_coords);
-	let max_x = Math.max.apply(null, x_coords);
-	let max_y = Math.max.apply(null, y_coords);
-
-	for (let i = min_y; i <= max_y; i++) {
-		let row = [];
-		for (let j = min_x; j <= max_x; j++) {
-			let val = zoneGrid[new Point(j, i).toImmutable()];
-			row.push(val ? `${i},${j} ${val[0]}${val[1]}${val[2]}${val[3]}${val[4]}` : ' ');
-		}
-		console.log(row.join(' '));
-	}
-}
-
-// Asssuming the card grid is drawn from 0,0,
-// gets the positions of the 4 corners [NW, NE, SE, SW]
-function getZoneCornersInCanvas(pos) {
-	let cardX = Math.floor(pos.x / 2);
-	let cardY = Math.floor(pos.y / 2);
-	let canvasCardX = cardX * (CARD_WIDTH + CARD_SPACING);
-	let canvasCardY = cardY * (CARD_WIDTH + CARD_SPACING);
-	let modX = Math.abs(pos.x % 2);
-	let modY = Math.abs(pos.y % 2);
-	let zoneQuad;
-
-	if (modX == 0 && modY == 0) {
-		zoneQuad = 0;
-	} else if (modX == 1 && modY == 0) {
-		zoneQuad = 1;
-	} else if (modX == 1 && modY == 1) {
-		zoneQuad = 2;
-	} else if (modX == 0 && modY == 1) {
-		zoneQuad = 3;
+class Territory {
+	constructor(id, zone, type) {
+		this.id = id;
+		this.type = type;
+		this.zones = new PointSet();
+		this.zones.add(zone)
+		this.neighbors = new PointSet();
+		this.neighborTerritories = new Set();
+		this.huts = 0;
+		this._path = null;
+		this._topLeftZone = null;
 	}
 
-	let zoneOrigin = ZONE_ORIGINS[zoneQuad];
-	return [
-		[canvasCardX + zoneOrigin[0], canvasCardY + zoneOrigin[1]],
-		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH, canvasCardY + zoneOrigin[1]],
-		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH, canvasCardY + zoneOrigin[1] + ZONE_WIDTH],
-		[canvasCardX + zoneOrigin[0], canvasCardY + zoneOrigin[1] + ZONE_WIDTH],
-	];
-}
+	get topLeftZone() {
+		if (this._topLeftZone)
+			return this._topLeftZone;
 
-// Calculates a path around each territory
-function calcTerritoryPaths() {
-	for (let territory of Game.territories) {
-		// Size 1 territories are simple
-		if (territory.zones.size == 1) {
-			territory.topLeftZone = territory.zones.values().next().value;
-			let zoneCorners = getZoneCornersInCanvas(territory.zones.values().next().value);
-			let p = new Path2D();
-			p.moveTo(zoneCorners[0][0], zoneCorners[0][1]);
-			p.lineTo(zoneCorners[1][0], zoneCorners[1][1]);
-			p.lineTo(zoneCorners[2][0], zoneCorners[2][1]);
-			p.lineTo(zoneCorners[3][0], zoneCorners[3][1]);
-			p.closePath();
-			territory.path = p;
-
-			continue;
+		if (this.zones.size == 1) {
+			this._topLeftZone = this.zones.values().next().value;
+			return this._topLeftZone;
 		}
 
-		// Find the top-left coordinate
-		let number_coords = Array.from(territory.zones);
+		let number_coords = Array.from(this.zones);
 		let x_coords = number_coords.map(coords => coords.x);
 		let y_coords = number_coords.map(coords => coords.y);
 		let min_x = Math.min.apply(null, x_coords);
 		let min_y = Math.min.apply(null, y_coords);
 		let start_coord;
 		for (let y = min_y; !start_coord; y++) {
-			if (territory.zones.has(new Point(min_x, y))) {
+			if (this.zones.has(new Point(min_x, y))) {
 				start_coord = new Point(min_x, y);
 				break;
 			}
 		}
-		territory.topLeftZone = start_coord;
+		this._topLeftZone = start_coord;
+		return this._topLeftZone;
+	}
 
-		// console.log(`territory ${territory.id} start coord is ${start_coord}`);
+	get path() {
+		if (this._path)
+			return this._path;
+
+		// Size 1 territories are simple
+		if (this.zones.size == 1) {
+			let zoneCorners = getZoneCornersInCanvas(this.zones.values().next().value);
+			let p = new Path2D();
+			this._path = p;
+			p.moveTo(zoneCorners[0][0], zoneCorners[0][1]);
+			p.lineTo(zoneCorners[1][0], zoneCorners[1][1]);
+			p.lineTo(zoneCorners[2][0], zoneCorners[2][1]);
+			p.lineTo(zoneCorners[3][0], zoneCorners[3][1]);
+			p.closePath();
+
+			return p;
+		}
+
+		let start_coord = this.topLeftZone;
+
+		// console.log(`territory ${this.id} start coord is ${start_coord}`);
 
 		let startCorners = getZoneCornersInCanvas(start_coord);
 
 		// The left side of the zone forms the initial path
 		let p = new Path2D();
-		territory.path = p;
+		this._path = p;
 		p.moveTo(startCorners[3][0], startCorners[3][1]);
 		p.lineTo(startCorners[0][0], startCorners[0][1]);
 		// console.log(`p.moveTo(${startCorners[3][0]}, ${startCorners[3][1]});`);
@@ -904,7 +864,7 @@ function calcTerritoryPaths() {
 
 		do {
 			// console.log(`next coord is ${next_coord}`);
-			if (territory.zones.has(next_coord)) {
+			if (this.zones.has(next_coord)) {
 				if (!curr_coord_in_territory) {
 					// Going from outside in.
 
@@ -919,7 +879,7 @@ function calcTerritoryPaths() {
 					} else if (direction == 3) {
 						left_zone = new Point(next_coord.x, next_coord.y - 1);
 					}
-					if (territory.zones.has(left_zone)) {
+					if (this.zones.has(left_zone)) {
 						let corners = getZoneCornersInCanvas(left_zone);
 						let corner = corners[(direction + 3) % 4];
 						p.lineTo(corner[0], corner[1]);
@@ -974,7 +934,58 @@ function calcTerritoryPaths() {
 		} while (!start_coord.equals(curr_coord));
 
 		p.closePath();
+
+		return p;
 	}
+}
+
+function debugPrintZoneGrid(zoneGrid) {
+	let number_coords = Object.keys(zoneGrid).map(Point.fromImmutable);
+	let x_coords = number_coords.map(pos => pos[0]);
+	let y_coords = number_coords.map(pos => pos[1]);
+	let min_x = Math.min.apply(null, x_coords);
+	let min_y = Math.min.apply(null, y_coords);
+	let max_x = Math.max.apply(null, x_coords);
+	let max_y = Math.max.apply(null, y_coords);
+
+	for (let i = min_y; i <= max_y; i++) {
+		let row = [];
+		for (let j = min_x; j <= max_x; j++) {
+			let val = zoneGrid[new Point(j, i).toImmutable()];
+			row.push(val ? `${i},${j} ${val[0]}${val[1]}${val[2]}${val[3]}${val[4]}` : ' ');
+		}
+		console.log(row.join(' '));
+	}
+}
+
+// Asssuming the card grid is drawn from 0,0,
+// gets the positions of the 4 corners [NW, NE, SE, SW]
+function getZoneCornersInCanvas(pos) {
+	let cardX = Math.floor(pos.x / 2);
+	let cardY = Math.floor(pos.y / 2);
+	let canvasCardX = cardX * (CARD_WIDTH + CARD_SPACING);
+	let canvasCardY = cardY * (CARD_WIDTH + CARD_SPACING);
+	let modX = Math.abs(pos.x % 2);
+	let modY = Math.abs(pos.y % 2);
+	let zoneQuad;
+
+	if (modX == 0 && modY == 0) {
+		zoneQuad = 0;
+	} else if (modX == 1 && modY == 0) {
+		zoneQuad = 1;
+	} else if (modX == 1 && modY == 1) {
+		zoneQuad = 2;
+	} else if (modX == 0 && modY == 1) {
+		zoneQuad = 3;
+	}
+
+	let zoneOrigin = ZONE_ORIGINS[zoneQuad];
+	return [
+		[canvasCardX + zoneOrigin[0], canvasCardY + zoneOrigin[1]],
+		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH, canvasCardY + zoneOrigin[1]],
+		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH, canvasCardY + zoneOrigin[1] + ZONE_WIDTH],
+		[canvasCardX + zoneOrigin[0], canvasCardY + zoneOrigin[1] + ZONE_WIDTH],
+	];
 }
 
 function panCanvas(timestamp) {
