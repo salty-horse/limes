@@ -162,16 +162,18 @@ const ZONE_ORIGINS = [
 	],
 ]
 
-var canvas, ctx;
-var hitCanvas, hitCtx;
-var newCardCanvas, newCardCtx;
-var hitRegions = {};
+let canvas, ctx;
+let hitCanvas, hitCtx;
+let newCardCanvas, newCardCtx;
+let hitRegions = {};
 
-var workerImage;
-var WORKER_WIDTH;
-var WORKER_HEIGHT;
-var WORKER_X;
-var WORKER_Y;
+let workerImage;
+let WORKER_WIDTH;
+let WORKER_HEIGHT;
+let WORKER_OUTLINE_SIDE;
+let WORKER_OUTLINE_ORIGIN;
+let WORKER_X;
+let WORKER_Y;
 
 
 
@@ -189,7 +191,7 @@ function getNewHitRegion(name) {
 }
 
 
-var GameState = {
+let GameState = {
 	PLACE_CARD: 1,
 	ROTATE_CARD: 2,
 	PLACE_OR_MOVE_WORKER: 3,
@@ -199,7 +201,7 @@ var GameState = {
 }
 
 // This marks the positions of all cards on the canvas
-var Game = {
+let Game = {
 	addCard: function(coord, card) {
 		this.cards.set(coord, card);
 
@@ -226,9 +228,9 @@ var Game = {
 		this.cards.delete(coord);
 
 		// Adjust grid side
-		var number_coords = Array.from(this.cards.keys());
-		var x_coords = number_coords.map(coords => coords.x);
-		var y_coords = number_coords.map(coords => coords.y);
+		let number_coords = Array.from(this.cards.keys());
+		let x_coords = number_coords.map(coords => coords.x);
+		let y_coords = number_coords.map(coords => coords.y);
 		this.minX = Math.min.apply(null, x_coords);
 		this.minY = Math.min.apply(null, y_coords);
 		this.sizeX = Math.max.apply(null, x_coords) - this.minX + 1;
@@ -252,8 +254,8 @@ var Game = {
 			}
 		}
 
-		var oldX = this.originX;
-		var oldY = this.originY;
+		let oldX = this.originX;
+		let oldY = this.originY;
 
 		// Calculate new grid origin
 		if (this.sizeX < 4) {
@@ -313,6 +315,7 @@ var Game = {
 		this.workers = [];
 
 		this.selectedTerritory = null;
+		this.selectedWorker = null;
 
 		this.cardDeck = Object.keys(CARDS);
 		this.cardRNG = new Math.seedrandom('test_game');
@@ -363,7 +366,7 @@ var Game = {
 			}
 
 			if (this.workerSupply > 0) {
-				var supplyButton = document.getElementById('supply_button');
+				let supplyButton = document.getElementById('supply_button');
 				supplyButton.classList.add('highlight');
 				supplyButton.onclick = () => { actionHandler('place_worker'); };
 			}
@@ -390,6 +393,23 @@ var Game = {
 				}
 
 				addHTMLButton('cancel', 'Undo worker placement');
+			}
+		} else if (this.state == GameState.MOVE_WORKER) {
+			if (this.selectedTerritory) {
+				instruction_label = 'Undo or continue';
+
+				addHTMLButton('cancel', 'Undo worker movement');
+				addHTMLButton('confirm', 'Draw next card');
+			} else {
+				instruction_label.textContent = 'Select a territory to move the worker to';
+
+				// Mark adjacent territories as selectable
+				let territory = Game.territories[Game.zoneTerritories.get(Game.selectedWorker)];
+				for (let ter_id of territory.neighborTerritories) {
+					this.targetTerritories.add(ter_id);
+				}
+
+				addHTMLButton('cancel', 'Undo worker movement');
 			}
 		}
 
@@ -440,10 +460,13 @@ window.addEventListener('load', function() {
 		WORKER_WIDTH = worker_side;
 		WORKER_HEIGHT = worker_side;
 	}
+
+	WORKER_OUTLINE_SIDE = Math.max(WORKER_WIDTH, WORKER_HEIGHT) + 8;
 	WORKER_X = Math.floor((ZONE_WIDTH - WORKER_WIDTH) / 2);
 	WORKER_Y = Math.floor((ZONE_WIDTH - WORKER_HEIGHT) / 2);
+	WORKER_OUTLINE_ORIGIN = Math.min(WORKER_X, WORKER_Y) - 4;
 
-	// var allCards = {
+	// let allCards = {
 	// 	'0,0': [1, 0],
 	// 	'1,0': [2, 0],
 	// 	'2,0': [3, 0],
@@ -538,8 +561,6 @@ function actionHandler(action) {
 
 		if (action == 'place_worker') {
 			Game.state = GameState.PLACE_WORKER;
-		} else if (action == 'move_worker') {
-			Game.state = GameState.MOVE_WORKER;
 		} else if (action == 'skip') {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
@@ -547,6 +568,10 @@ function actionHandler(action) {
 		} else if (action == 'go_back') {
 			Game.state = GameState.PLACE_CARD;
 			Game.removeCard(Game.newCardPosition);
+		} else {
+			// Chosen a worker to move
+			Game.selectedWorker = Point.fromImmutable(action);
+			Game.state = GameState.MOVE_WORKER;
 		}
 	} else if (Game.state == GameState.PLACE_WORKER) {
 		if (action == 'cancel') {
@@ -584,6 +609,48 @@ function actionHandler(action) {
 			}
 			Game.targetTerritories.clear();
 		}
+	} else if (Game.state == GameState.MOVE_WORKER) {
+		if (action == 'cancel') {
+			if (Game.selectedTerritory) {
+				Game.selectedTerritory = null;
+				Game.workers.pop();
+				Game.workers.push(Game.selectedWorker);
+			}
+			Game.targetTerritories.clear();
+			Game.selectedWorker = null;
+			Game.state = GameState.PLACE_OR_MOVE_WORKER;
+		} else if (action == 'confirm') {
+			Game.targetTerritories.clear();
+			Game.selectedTerritory = null;
+			Game.selectedWorker = null;
+			Game.state = GameState.PLACE_CARD;
+			Game.newCard = null;
+			Game.newCardRotation = 0;
+		} else {
+			// A territory was chosen
+			Game.selectedTerritory = Game.territories[action];
+
+			// Remove worker from array
+			let ix = 0;
+			for (; ix < Game.workers.length; ix++) {
+				if (Game.workers[ix].equals(Game.selectedWorker)) {
+					Game.workers.splice(ix, 1);
+					break;
+				}
+			}
+
+			let existingWorkerZone = findWorkerInTerritory(Game.selectedTerritory);
+
+			// Place the worker in the territory
+			if (existingWorkerZone) {
+				// Reuse an existing worker position
+				Game.workers.push(existingWorkerZone);
+			} else {
+				// Pick the top-left zone
+				Game.workers.push(Game.selectedTerritory.topLeftZone);
+			}
+			Game.targetTerritories.clear();
+		}
 	}
 
 	Game.update();
@@ -610,7 +677,7 @@ function findWorkerInTerritory(territory) {
 
 function parseMap() {
 	// Build grid of zones
-	var zoneGrid = new PointMap();
+	let zoneGrid = new PointMap();
 
 	function addCardToGrid(coord, card_num, rotation) {
 		let card_info = CARDS[card_num];
@@ -646,7 +713,7 @@ function parseMap() {
 	// Collect zones into territories
 	Game.territories = [];
 	Game.zoneTerritories = new PointMap();
-	var unscanned_coords = new PointSet();
+	let unscanned_coords = new PointSet();
 
 	// Collect all towers, which are a territory on their own
 	for (let [coords, zone_info] of zoneGrid) {
@@ -673,7 +740,7 @@ function parseMap() {
 		Game.zoneTerritories.set(coords, territory.id);
 
 		// Explore the new territory
-		var coords_to_explore = new PointSet();
+		let coords_to_explore = new PointSet();
 		coords_to_explore.add(coords);
 		while (coords_to_explore.size) {
 			let coords = coords_to_explore.values().next().value;
@@ -684,7 +751,7 @@ function parseMap() {
 					Game.zoneTerritories.set(neighbor, territory.id);
 					unscanned_coords.delete(neighbor);
 					coords_to_explore.add(neighbor);
-				} else if (zoneGrid.has(neighbor)) {
+				} else if (zoneGrid.has(neighbor) && zoneGrid.get(neighbor)[0] != territory.type) {
 					territory.neighbors.add(neighbor);
 
 					// Count adjacent hut
@@ -730,16 +797,18 @@ function Territory(id, zone, type) {
 	this.neighbors = new PointSet();
 	this.neighborTerritories = new Set();
 	this.huts = 0;
+	this.path = null;
+	this.topLeftZone = null;
 }
 
 function debugPrintZoneGrid(zoneGrid) {
-	var number_coords = Object.keys(zoneGrid).map(Point.fromImmutable);
-	var x_coords = number_coords.map(pos => pos[0]);
-	var y_coords = number_coords.map(pos => pos[1]);
-	var min_x = Math.min.apply(null, x_coords);
-	var min_y = Math.min.apply(null, y_coords);
-	var max_x = Math.max.apply(null, x_coords);
-	var max_y = Math.max.apply(null, y_coords);
+	let number_coords = Object.keys(zoneGrid).map(Point.fromImmutable);
+	let x_coords = number_coords.map(pos => pos[0]);
+	let y_coords = number_coords.map(pos => pos[1]);
+	let min_x = Math.min.apply(null, x_coords);
+	let min_y = Math.min.apply(null, y_coords);
+	let max_x = Math.max.apply(null, x_coords);
+	let max_y = Math.max.apply(null, y_coords);
 
 	for (let i = min_y; i <= max_y; i++) {
 		let row = [];
@@ -754,13 +823,13 @@ function debugPrintZoneGrid(zoneGrid) {
 // Asssuming the card grid is drawn from 0,0,
 // gets the positions of the 4 corners [NW, NE, SE, SW]
 function getZoneCornersInCanvas(pos) {
-	var cardX = Math.floor(pos.x / 2);
-	var cardY = Math.floor(pos.y / 2);
-	var canvasCardX = cardX * (CARD_WIDTH + CARD_SPACING);
-	var canvasCardY = cardY * (CARD_WIDTH + CARD_SPACING);
-	var modX = Math.abs(pos.x % 2);
-	var modY = Math.abs(pos.y % 2);
-	var zoneQuad;
+	let cardX = Math.floor(pos.x / 2);
+	let cardY = Math.floor(pos.y / 2);
+	let canvasCardX = cardX * (CARD_WIDTH + CARD_SPACING);
+	let canvasCardY = cardY * (CARD_WIDTH + CARD_SPACING);
+	let modX = Math.abs(pos.x % 2);
+	let modY = Math.abs(pos.y % 2);
+	let zoneQuad;
 
 	if (modX == 0 && modY == 0) {
 		zoneQuad = 0;
@@ -772,7 +841,7 @@ function getZoneCornersInCanvas(pos) {
 		zoneQuad = 3;
 	}
 
-	var zoneOrigin = ZONE_ORIGINS[zoneQuad];
+	let zoneOrigin = ZONE_ORIGINS[zoneQuad];
 	return [
 		[canvasCardX + zoneOrigin[0], canvasCardY + zoneOrigin[1]],
 		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH, canvasCardY + zoneOrigin[1]],
@@ -786,6 +855,7 @@ function calcTerritoryPaths() {
 	for (let territory of Game.territories) {
 		// Size 1 territories are simple
 		if (territory.zones.size == 1) {
+			territory.topLeftZone = territory.zones.values().next().value;
 			let zoneCorners = getZoneCornersInCanvas(territory.zones.values().next().value);
 			let p = new Path2D();
 			p.moveTo(zoneCorners[0][0], zoneCorners[0][1]);
@@ -808,8 +878,11 @@ function calcTerritoryPaths() {
 		for (let y = min_y; !start_coord; y++) {
 			if (territory.zones.has(new Point(min_x, y))) {
 				start_coord = new Point(min_x, y);
+				break;
 			}
 		}
+		territory.topLeftZone = start_coord;
+
 		// console.log(`territory ${territory.id} start coord is ${start_coord}`);
 
 		let startCorners = getZoneCornersInCanvas(start_coord);
@@ -909,7 +982,7 @@ function panCanvas(timestamp) {
 		Game.panStartTime = timestamp;
 	}
 
-	var t = timestamp - Game.panStartTime;
+	let t = timestamp - Game.panStartTime;
 
 	Game.panX = Game.panStartX + Game.panSpeedX * t;
 	Game.panY = Game.panStartY + Game.panSpeedY * t;
@@ -1010,9 +1083,9 @@ function draw() {
 	}
 
 	// Draw workers
+
 	let worker_counts = {};
 	for (let worker_pos of Game.workers) {
-		console.log(worker_pos);
 		let s = worker_pos.toImmutable();
 		if (worker_counts[s]) {
 			worker_counts[s] += 1;
@@ -1021,11 +1094,10 @@ function draw() {
 		}
 	}
 
-	for (let worker_pos in worker_counts) {
-		let count = worker_counts[worker_pos];
-		let pos = Point.fromImmutable(worker_pos);
+	for (let pos_str in worker_counts) {
+		let count = worker_counts[pos_str];
+		let pos = Point.fromImmutable(pos_str);
 		let zoneOrigin = getZoneCornersInCanvas(pos)[0];
-		console.log(zoneOrigin);
 		ctx.drawImage(workerImage,
 			zoneOrigin[0] + WORKER_X,
 			zoneOrigin[1] + WORKER_Y,
@@ -1045,8 +1117,35 @@ function draw() {
 				zoneOrigin[0] + center,
 				zoneOrigin[1] + center);
 		}
+
+		// Draw worker outlines
+		if (Game.state == GameState.PLACE_OR_MOVE_WORKER) {
+			ctx.strokeStyle = 'red';
+			ctx.lineWidth = 4;
+			ctx.lineJoin = 'round';
+			ctx.setLineDash([8, 4]);
+			ctx.strokeRect(
+				zoneOrigin[0] + WORKER_OUTLINE_ORIGIN - 4,
+				zoneOrigin[1] + WORKER_OUTLINE_ORIGIN - 4,
+				WORKER_OUTLINE_SIDE + 8,
+				WORKER_OUTLINE_SIDE + 8
+			);
+			ctx.lineJoin = 'miter';
+
+			let hitRegionColor = getNewHitRegion(pos_str);
+			hitCtx.fillStyle = hitRegionColor;
+			hitCtx.lineWidth = 4;
+			hitCtx.fillRect(
+				zoneOrigin[0] + WORKER_OUTLINE_ORIGIN - 4,
+				zoneOrigin[1] + WORKER_OUTLINE_ORIGIN - 4,
+				WORKER_OUTLINE_SIDE + 8,
+				WORKER_OUTLINE_SIDE + 8
+			);
+		}
+
 	}
 	ctx.shadowBlur = 0;
+
 
 	// Draw newly-placed card
 
@@ -1160,7 +1259,7 @@ function drawCard(ctx, num, rot, x, y) {
 	);
 	ctx.stroke();
 
-	var card_info = CARDS[num];
+	let card_info = CARDS[num];
 
 	for (let i = 0; i < 4; i++) {
 		drawZone(ctx, card_info[i], i);
@@ -1211,7 +1310,7 @@ function drawCircle(ctx, x, y, radius, color) {
 }
 
 function drawZone(ctx, zone_info, quad) {
-	var [zone_x, zone_y] = ZONE_ORIGINS[quad];
+	let [zone_x, zone_y] = ZONE_ORIGINS[quad];
 
 	ctx.fillStyle = COLORS[zone_info[0]];
 	ctx.fillRect(zone_x, zone_y, ZONE_WIDTH, ZONE_WIDTH);
@@ -1224,12 +1323,12 @@ function drawZone(ctx, zone_info, quad) {
 
 	ctx.translate(zone_x, zone_y);
 
-	var center = Math.round(ZONE_WIDTH / 2);
+	let center = Math.round(ZONE_WIDTH / 2);
 	ctx.lineWidth = 1;
 	ctx.strokeStyle = 'black';
 	ctx.fillStyle = HUT_COLOR;
 
-	var x, y;
+	let x, y;
 
 	// North
 	if (zone_info[1]) {
@@ -1267,19 +1366,19 @@ function drawZone(ctx, zone_info, quad) {
 }
 
 function clearHTMLButtons() {
-	var elem = document.getElementById('buttons');
+	let elem = document.getElementById('buttons');
 	while (elem.firstChild) {
 		elem.removeChild(elem.firstChild);
 	}
-	var supplyButton = document.getElementById('supply_button');
+	let supplyButton = document.getElementById('supply_button');
 	supplyButton.classList.remove('highlight');
 	supplyButton.onclick = null;
 }
 
 function addHTMLButton(name, label) {
-	var container = document.getElementById('buttons');
-	var li = document.createElement('li');
-	var button = document.createElement('button');
+	let container = document.getElementById('buttons');
+	let li = document.createElement('li');
+	let button = document.createElement('button');
 	button.type = 'button';
 	button.textContent = label;
 	button.onclick = () => { actionHandler(name); };
@@ -1299,21 +1398,21 @@ function addHTMLButton(name, label) {
 // 'F': Forest
 // 'T': Tower
 
-var ROTATION_ORDER = {
+let ROTATION_ORDER = {
 	0: [0, 1, 2, 3],
 	1: [3, 0, 1, 2],
 	2: [2, 3, 0, 1],
 	3: [1, 2, 3, 0],
 }
 
-var COLORS = {
+let COLORS = {
 	'Y': '#eab529',
 	'W': '#094b99',
 	'F': '#79a029',
 	'T': '#989993',
 }
 
-var CARDS = {
+let CARDS = {
 	1 : [['F', 1], ['Y', 0, 1], ['Y'], ['F']],
 	2 : [['W'], ['T'], ['W'], ['T', 1, 1]],
 	3 : [['T', 0, 0, 1, 1], ['Y'], ['T', 0, 0, 0, 1], ['W']],
