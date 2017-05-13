@@ -354,6 +354,7 @@ let Game = {
 		this.addCard(new Point(0, 0), [this.cardDeck[ix], 0]);
 		this.cardDeck.splice(ix, 1);
 		this.updateUI();
+		this.updateScore();
 
 		parseMap();
 		draw();
