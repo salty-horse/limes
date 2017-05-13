@@ -311,7 +311,14 @@ let Game = {
 
 		this.workerSupply = 7;
 
-		// Zones the workers are on.
+		this.score = 0;
+		this.tempScore = 0;
+
+		this.territories = null;
+		this.zoneGrid = null;
+		this.zoneTerritories = null;
+
+		// Zones the workers are on
 		this.workers = [];
 
 		this.selectedTerritory = null;
@@ -325,14 +332,16 @@ let Game = {
 
 		this.targetTerritories = new Set();
 
+
 		// Draw new card
 		let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
 		this.addCard(new Point(0, 0), [this.cardDeck[ix], 0]);
 		this.cardDeck.splice(ix, 1);
-		this.update();
+		this.updateUI();
 	},
 
-	update: function() {
+	// Updates HTML
+	updateUI: function() {
 		clearHTMLButtons();
 
 		let instruction_label = document.getElementById('instruction');
@@ -352,6 +361,9 @@ let Game = {
 					drawCard(newCardCtx, this.newCard, 0, 0, 0);
 					instruction_label.textContent = 'Place the card:';
 					clearHTMLButtons();
+
+					// Update score since we can't undo
+					this.score = this.tempScore;
 				}
 			}
 		} else if (this.state == GameState.PLACE_OR_MOVE_WORKER) {
@@ -383,7 +395,7 @@ let Game = {
 				instruction_label = 'Undo or continue';
 
 				addHTMLButton('cancel', 'Undo worker placement');
-				addHTMLButton('confirm', 'Draw next card');
+				addHTMLButton('confirm', this.cards.size != 16 ? 'Draw next card' : 'End game');
 			} else {
 				instruction_label.textContent = 'Select a territory to place the worker in';
 
@@ -399,7 +411,7 @@ let Game = {
 				instruction_label = 'Undo or continue';
 
 				addHTMLButton('cancel', 'Undo worker movement');
-				addHTMLButton('confirm', 'Draw next card');
+				addHTMLButton('confirm', this.cards.size != 16 ? 'Draw next card' : 'End game');
 			} else {
 				instruction_label.textContent = 'Select a territory to move the worker to';
 
@@ -414,10 +426,11 @@ let Game = {
 		}
 
 		if (this.state == GameState.GAME_OVER) {
-			instruction_label.textContent = 'Game over! TODO: Score summary';
+			instruction_label.textContent = 'Game over!';
+			this.score = this.tempScore;
+			// TODO: Score summary
 		}
 
-		// Update HTML
 		if (this.state == GameState.PLACE_CARD) {
 			newCardCanvas.hidden = false;
 		}
@@ -427,6 +440,88 @@ let Game = {
 		}
 
 		document.getElementById('supply').textContent = this.workerSupply;
+	},
+
+	calcScore: function() {
+		let score = 0;
+
+		// Get worker count for each territory
+		let worker_counts = {};
+		for (let worker_pos of Game.workers) {
+			let s = worker_pos.toImmutable();
+			if (worker_counts[s]) {
+				worker_counts[s] += 1;
+			} else {
+				worker_counts[s] = 1;
+			}
+		}
+
+		for (let pos_str in worker_counts) {
+			let pos = Point.fromImmutable(pos_str);
+			let zoneInfo = this.zoneGrid.get(pos);
+
+			// Field
+			if (zoneInfo[0] == 'Y') {
+				score += this.territories[this.zoneTerritories.get(pos)].zones.size;
+
+			// Water
+			} else if (zoneInfo[0] == 'W') {
+				score += this.territories[this.zoneTerritories.get(pos)].huts;
+
+			// Forest
+			} else if (zoneInfo[0] == 'F') {
+				score += this.territories[this.zoneTerritories.get(pos)].neighborTerritories.size;
+
+			// Tower
+			} else if (zoneInfo[0] == 'T') {
+				// Count forest zones in all four directions until the edge or a tower
+				for (let dir = 0; dir < 4; dir++) {
+					let p = new Point(pos.x, pos.y);
+
+					while (true) {
+						if (dir == 0)
+							p.y--;
+						else if (dir == 1)
+							p.x++;
+						else if (dir == 2)
+							p.y++;
+						else if (dir == 3)
+							p.x--;
+
+						let zone = this.zoneGrid.get(p);
+						if (zone == undefined || zone[0] == 'T')
+							break;
+
+						if (zone[0] == 'F')
+							score++;
+					}
+				}
+			}
+		}
+
+		this.tempScore = score;
+	},
+
+	// Update score HTML
+	updateScore: function() {
+		// Update HTML
+		document.getElementById('score').textContent = this.score;
+		let scoreDiff = this.tempScore - this.score;
+		let diffElem = document.getElementById('new_points');
+		if (scoreDiff == 0) {
+			diffElem.textContent = '';
+		} else {
+			if (scoreDiff > 0) {
+				diffElem.textContent = '+' + scoreDiff;
+				diffElem.classList.add('positive');
+				diffElem.classList.remove('negative');
+			} else {
+				diffElem.textContent = scoreDiff;
+				diffElem.classList.add('negative');
+				diffElem.classList.remove('positive');
+			}
+		}
+
 	},
 }
 
@@ -653,8 +748,14 @@ function actionHandler(action) {
 		}
 	}
 
-	Game.update();
-	parseMap(); // TODO: In some cases we don't need to call this
+	Game.updateUI();
+
+	if (Game.state != GameState.GAME_OVER) {
+		parseMap(); // TODO: Don't call this when doing UI actions that don't change the game state
+		Game.calcScore();
+	}
+	Game.updateScore();
+
 	draw();
 }
 
@@ -678,6 +779,7 @@ function findWorkerInTerritory(territory) {
 function parseMap() {
 	// Build grid of zones
 	let zoneGrid = new PointMap();
+	Game.zoneGrid = zoneGrid;
 
 	function addCardToGrid(coord, card_num, rotation) {
 		let card_info = CARDS[card_num];
@@ -1095,6 +1197,7 @@ function draw() {
 
 	// Draw workers
 
+	// Get worker count for each territory
 	let worker_counts = {};
 	for (let worker_pos of Game.workers) {
 		let s = worker_pos.toImmutable();
@@ -1323,7 +1426,7 @@ function drawCircle(ctx, x, y, radius, color) {
 function drawZone(ctx, zone_info, quad) {
 	let [zone_x, zone_y] = ZONE_ORIGINS[quad];
 
-	ctx.fillStyle = COLORS[zone_info[0]];
+	ctx.fillStyle = ZONE_COLORS[zone_info[0]];
 	ctx.fillRect(zone_x, zone_y, ZONE_WIDTH, ZONE_WIDTH);
 
 	// Draw huts
@@ -1416,7 +1519,7 @@ let ROTATION_ORDER = {
 	3: [1, 2, 3, 0],
 }
 
-let COLORS = {
+let ZONE_COLORS = {
 	'Y': '#eab529',
 	'W': '#094b99',
 	'F': '#79a029',

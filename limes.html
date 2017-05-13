@@ -27,8 +27,16 @@
     padding-left: 0;
   }
 
-  #score {
+  #score, #new_points {
       font-size: 180%;
+  }
+
+  #new_points.positive {
+      color: green;
+  }
+
+  #new_points.negative {
+      color: red;
   }
 
   #supply {
@@ -78,11 +86,11 @@
   <div id="info">
     <h1>LIMES</h1>
     <ul id="stats">
-        <li>Score: <span id="score">0</span></li>
+        <li>Score: <span id="score">0</span> <span id="new_points"></span></li>
         <li id="supply_button">Supply: <span id="supply">0</span> × <img id="worker_image" src="worker.png"/></li>
     </ul>
     <div>
-      <span id="instruction">Place the card:</span>
+      <span id="instruction"></span>
       <canvas id="new_card"></canvas>
       <ul id="buttons"></ul>
     </div>
