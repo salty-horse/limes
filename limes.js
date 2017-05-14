@@ -379,13 +379,14 @@ let Game = {
 
 					// Draw card onto mini-canvas
 					drawCard(newCardCtx, this.newCard, 0, 0, 0);
-					instruction_label.textContent = 'Place the card:';
-					clearHTMLButtons();
 
 					// Update score since we can't undo
 					this.score = this.tempScore;
 				}
 			}
+			instruction_label.textContent = 'Place the card:';
+			clearHTMLButtons();
+
 		} else if (this.state == GameState.PLACE_OR_MOVE_WORKER) {
 			let instruction_text;
 
