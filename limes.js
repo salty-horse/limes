@@ -1215,7 +1215,7 @@ function draw() {
 			WORKER_HEIGHT
 		);
 		if (count > 1) {
-			ctx.font = (CARD_WIDTH * 0.1).toString() + 'px serif';
+			ctx.font = Math.floor(CARD_WIDTH * 0.1) + 'px serif';
 			ctx.textAlign = 'center';
 			ctx.textBaseline = 'middle';
 			ctx.shadowColor = 'grey';
@@ -1383,7 +1383,7 @@ function drawCard(ctx, num, rot, x, y) {
 	drawCircle(ctx, circle_x, circle_y, CARD_WIDTH * 0.1, BORDER_COLOR);
 	drawCircle(ctx, circle_x, circle_y, CARD_WIDTH * 0.09, 'white');
 
-	ctx.font = (CARD_WIDTH * 0.1).toString() + 'px serif';
+	ctx.font = Math.floor(CARD_WIDTH * 0.1).toString() + 'px serif';
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
 	ctx.fillStyle = 'black';
