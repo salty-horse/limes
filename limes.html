@@ -16,13 +16,13 @@
     ga('send', 'pageview');
   </script>
   <style type="text/css">
+  body {
+    display: flex;
+  }
+
   #canvas {
     border: 1px solid black;
     flex-shrink: 0;
-  }
-
-  body {
-    display: flex;
   }
 
   #info {
@@ -71,7 +71,13 @@
     padding-left: 0;
   }
 
-  #buttons button {
+  #new_game_container {
+    margin-top: 24px;
+  }
+
+  #buttons button, #new_game {
+    min-height: 3em;
+    width: 200px;
     margin:0 20px 20px 0;
     -webkit-border-radius: 12;
     -moz-border-radius: 12;
@@ -113,7 +119,7 @@
     <h1>LIMES</h1>
     Game ID: <span id="game_id"></span>
     <div class="copywrapper"><button id="copy_button">Copy link for sharing</button><input id="share_link" type="text" onfocus="this.select()" readonly=""></div>
-    <div><button id="new_game">New Game</button></div>
+    <div id="new_game_container"><button id="new_game">New Game</button></div>
     <ul id="stats">
         <li>Score: <span id="score">0</span> <span id="new_points"></span></li>
         <li id="supply_button">Supply: <span id="supply">0</span> × <img id="worker_image" src="worker.png"/></li>
