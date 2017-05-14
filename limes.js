@@ -332,6 +332,7 @@ let Game = {
 		this.selectedTerritory = null;
 		this.selectedWorker = null;
 
+		this.sharedLink = Boolean(seed);
 		if (!seed) {
 			seed = getRandomString();
 		}
@@ -450,6 +451,12 @@ let Game = {
 			instruction_label.textContent = 'Game over!';
 			this.score = this.tempScore;
 			// TODO: Score summary
+
+			ga('send', 'event', 'game', 'game_over', this.score);
+
+			if (this.sharedLink) {
+				ga('send', 'event', 'game', 'finished_shared_game');
+			}
 		}
 
 		if (this.state == GameState.PLACE_CARD) {
