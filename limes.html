@@ -17,16 +17,34 @@
   </script>
   <style type="text/css">
   body {
-    display: flex;
+  }
+
+  #display {
+    height: 100vh;
+    margin-right: 200px;
+    overflow: scroll;
   }
 
   #canvas {
-    border: 1px solid black;
-    flex-shrink: 0;
+    /* border: 1px solid black; */
+    /* flex-shrink: 0; */
   }
 
+
   #info {
-    margin-left: 20px;
+    position: fixed;
+    /*height: 100%;*/
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 200px; /* Makes room for card width */
+    padding-left: 20px;
+    border-left: solid black 1px;
+    background-color: white;
+  }
+
+  #share_link {
+    width: 80px;
   }
 
   #stats {
@@ -71,10 +89,6 @@
     padding-left: 0;
   }
 
-  #new_game_container {
-    margin-top: 24px;
-  }
-
   #buttons button, #new_game {
     min-height: 3em;
     width: 200px;
@@ -114,7 +128,6 @@
   </style>
   </head>
   <body>
-  <canvas id="canvas"></canvas>
   <div id="info">
     <h1>LIMES</h1>
     Game ID: <span id="game_id"></span>
@@ -130,5 +143,6 @@
       <ul id="buttons"></ul>
     </div>
   </div>
+  <div id="display"><canvas id="canvas"></canvas></div>
   </body>
 </html>
