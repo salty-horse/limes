@@ -268,14 +268,18 @@ let Game = {
 		// Calculate new grid origin
 		if (this.sizeX < 4) {
 			this.originX = this.minX - 1;
+			Game.drawSizeX = Game.sizeX + 2;
 		} else {
 			this.originX = this.minX;
+			Game.drawSizeX = 4;
 		}
 
 		if (this.sizeY < 4) {
 			this.originY = this.minY - 1;
+			Game.drawSizeY = Game.sizeY + 2;
 		} else {
 			this.originY = this.minY;
+			Game.drawSizeY = 4;
 		}
 
 		// If the grid origin changed, start panning
@@ -290,6 +294,12 @@ let Game = {
 			Game.panStartY = Game.panY;
 
 			window.requestAnimationFrame(panCanvas);
+		} else {
+			// Resize the canvas to fit image
+			canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
+			canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
+			hitCanvas.width = canvas.width;
+			hitCanvas.height = canvas.height;
 		}
 	},
 
@@ -301,6 +311,8 @@ let Game = {
 		this.sizeY = 1;
 		this.minX = 0;
 		this.minY = 0;
+		this.drawSizeX = 3;
+		this.drawSizeY = 3;
 
 		// Grid origin, accounting for future placements
 		this.originX = -1;
@@ -555,8 +567,11 @@ let Game = {
 
 window.addEventListener('DOMContentLoaded', function() {
 	canvas = document.getElementById('canvas');
-	canvas.width = canvas.height = CARD_WIDTH * 5 + CANVAS_OFFSET * 2 + 10;
 	ctx = canvas.getContext('2d');
+
+	// This is the initial width and height. It will grow and shrink as needed.
+	canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
+	canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
 
 	hitCanvas = document.createElement('canvas');
 	hitCanvas.width = canvas.width;
@@ -1105,6 +1120,13 @@ function panCanvas(timestamp) {
 		Game.panStartX = 0;
 		Game.panStartY = 0;
 		Game.panStartTime = null;
+
+		// Resize the canvas to fit image
+		canvas.width = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_OFFSET * 2 + 10;
+		canvas.height = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_OFFSET * 2 + 10;
+		hitCanvas.width = canvas.width;
+		hitCanvas.height = canvas.height;
+
 		draw();
 		return;
 	}
