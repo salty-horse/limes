@@ -12,6 +12,7 @@ const BUTTON_RADIUS = CARD_WIDTH * 0.15;
 const CANVAS_OFFSET = BUTTON_RADIUS * 2 - 10;
 const PANNING_DURATION_MILLIS = 200;
 const ROTATION_DURATION_MILLIS = 150;
+const PATH_MARGIN = BORDER_WIDTH / 2;
 
 
 class Point {
@@ -1023,7 +1024,7 @@ class Territory {
 
 		// Size 1 territories are simple
 		if (this.zones.size == 1) {
-			let zoneCorners = getZoneCornersInCanvas(this.zones.values().next().value);
+			let zoneCorners = getZoneCornersInCanvas(this.zones.values().next().value, PATH_MARGIN);
 			let p = new Path2D();
 			this._path = p;
 			p.moveTo(zoneCorners[0][0], zoneCorners[0][1]);
@@ -1037,7 +1038,7 @@ class Territory {
 
 		let start_coord = this.topLeftZone;
 
-		let startCorners = getZoneCornersInCanvas(start_coord);
+		let startCorners = getZoneCornersInCanvas(start_coord, PATH_MARGIN);
 
 		// The left side of the zone forms the initial path
 		let p = new Path2D();
@@ -1069,19 +1070,19 @@ class Territory {
 						left_zone = new Point(next_coord.x, next_coord.y - 1);
 					}
 					if (this.zones.has(left_zone)) {
-						let corners = getZoneCornersInCanvas(left_zone);
+						let corners = getZoneCornersInCanvas(left_zone, PATH_MARGIN);
 						let corner = corners[(direction + 3) % 4];
 						p.lineTo(corner[0], corner[1]);
 					}
 
 					// Add the BACK RIGHT corner of the new zone to the path.
-					let corners = getZoneCornersInCanvas(next_coord);
+					let corners = getZoneCornersInCanvas(next_coord, PATH_MARGIN);
 					let corner = corners[(direction + 2) % 4];
 					p.lineTo(corner[0], corner[1]);
 				} else {
 					// Staying inside.
 					// Add the FRONT LEFT corner of the old zone to the path
-					let corners = getZoneCornersInCanvas(curr_coord);
+					let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
 				}
@@ -1094,7 +1095,7 @@ class Territory {
 				if (curr_coord_in_territory) {
 					// Going from inside out.
 					// Add the FRONT LEFT corner of the current zone to the path
-					let corners = getZoneCornersInCanvas(curr_coord);
+					let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
 					let corner = corners[direction];
 					p.lineTo(corner[0], corner[1]);
 				}
@@ -1126,7 +1127,7 @@ class Territory {
 
 // Asssuming the card grid is drawn from 0,0,
 // gets the positions of the 4 corners [NW, NE, SE, SW]
-function getZoneCornersInCanvas(pos) {
+function getZoneCornersInCanvas(pos, margin = 0) {
 	let cardX = Math.floor(pos.x / 2);
 	let cardY = Math.floor(pos.y / 2);
 	let canvasCardX = cardX * (CARD_WIDTH + CARD_SPACING);
@@ -1147,10 +1148,10 @@ function getZoneCornersInCanvas(pos) {
 
 	let zoneOrigin = ZONE_ORIGINS[zoneQuad];
 	return [
-		[canvasCardX + zoneOrigin[0], canvasCardY + zoneOrigin[1]],
-		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH, canvasCardY + zoneOrigin[1]],
-		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH, canvasCardY + zoneOrigin[1] + ZONE_WIDTH],
-		[canvasCardX + zoneOrigin[0], canvasCardY + zoneOrigin[1] + ZONE_WIDTH],
+		[canvasCardX + zoneOrigin[0] + margin, canvasCardY + zoneOrigin[1] + margin],
+		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH - margin, canvasCardY + zoneOrigin[1] + margin],
+		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH - margin, canvasCardY + zoneOrigin[1] + ZONE_WIDTH - margin],
+		[canvasCardX + zoneOrigin[0] + margin, canvasCardY + zoneOrigin[1] + ZONE_WIDTH - margin],
 	];
 }
 
@@ -1396,29 +1397,24 @@ function draw() {
 
 	// Draw territories
 
-	ctx.save()
+	if (Game.targetTerritories.size > 0) {
+		ctx.lineWidth = 4;
+		ctx.lineJoin = 'round';
+		ctx.strokeStyle = 'red';
+		ctx.setLineDash([8, 4]);
 
-	// TODO: Use scale to make the territory outlines smaller
+		for (let terId of Game.targetTerritories) {
+			let territory = Game.territories[terId];
+			if (!territory.path)
+				continue;
+			ctx.stroke(territory.path);
 
-	ctx.lineWidth = 4;
-	ctx.lineJoin = 'round';
-	ctx.strokeStyle = 'red';
-	ctx.setLineDash([8, 4]);
-
-	for (let terId of Game.targetTerritories) {
-		let territory = Game.territories[terId];
-		if (!territory.path)
-			continue;
-		let coords = Array.from(territory.zones).join('  ');
-		ctx.stroke(territory.path);
-
-		let hitRegionColor = getNewHitRegion(terId.toString());
-		hitCtx.fillStyle = hitRegionColor;
-		hitCtx.lineWidth = 4;
-		hitCtx.fill(territory.path);
+			let hitRegionColor = getNewHitRegion(terId.toString());
+			hitCtx.fillStyle = hitRegionColor;
+			hitCtx.lineWidth = 4;
+			hitCtx.fill(territory.path);
+		}
 	}
-
-	ctx.restore();
 
 	hitCtx.restore();
 	ctx.restore();
