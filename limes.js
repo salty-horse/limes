@@ -11,6 +11,7 @@ const HUT_WIDTH = Math.round(ZONE_WIDTH / 4);
 const BUTTON_RADIUS = CARD_WIDTH * 0.15;
 const CANVAS_OFFSET = BUTTON_RADIUS * 2 - 10;
 const PANNING_DURATION_MILLIS = 200;
+const ROTATION_DURATION_MILLIS = 150;
 
 
 class Point {
@@ -318,12 +319,17 @@ let Game = {
 		this.originX = -1;
 		this.originY = -1;
 
+		// Panning animation
 		this.panX = 0;
 		this.panY = 0;
 		this.panStartX = 0;
 		this.panStartY = 0;
 		this.panStartTime = null;
 
+		// Card rotation animation
+		this.rotateOffset = 0;
+		this.rotateStartTime = null;
+		this.rotationDir = null;
 
 		this.newCard = null;
 		this.newCardPosition = new Point(0, 0);
@@ -717,8 +723,12 @@ function actionHandler(action) {
 			Game.newCardRotation = 0; // TODO: Keep rotation?
 		} else if (action == 'rotate_left') {
 			Game.newCardRotation = (Game.newCardRotation + 3) % 4;
+			Game.rotationDir = 1;
+			window.requestAnimationFrame(animateCardRotation);
 		} else if (action == 'rotate_right') {
 			Game.newCardRotation = (Game.newCardRotation + 1) % 4;
+			Game.rotationDir = -1;
+			window.requestAnimationFrame(animateCardRotation);
 		}
 	} else if (Game.state == GameState.PLACE_OR_MOVE_WORKER) {
 		Game.selectedTerritory = null;
@@ -842,6 +852,10 @@ function actionHandler(action) {
 	}
 
 	Game.updateScore();
+
+	// If there's any animation in progress, let it handle drawing
+	if (Game.panX != 0 || Game.panY != 0 || Game.rotateOffset)
+		return;
 
 	draw();
 }
@@ -1174,6 +1188,32 @@ function panCanvas(timestamp) {
 	window.requestAnimationFrame(panCanvas);
 }
 
+function animateCardRotation(timestamp) {
+	if (Game.rotateStartTime == null) {
+		Game.rotateStartTime = timestamp;
+	}
+
+	let t = timestamp - Game.rotateStartTime;
+
+	// Rotate right: from -0.5 up to 0
+	// Rotate left: from 0.5 down to 0
+
+	Game.rotateOffset = 0.5 - (0.5 / ROTATION_DURATION_MILLIS) * t;
+
+	if (Game.rotateOffset <= 0) {
+	    Game.rotateOffset = 0;
+		Game.rotateStartTime = null;
+
+		draw();
+		return;
+	}
+
+	Game.rotateOffset *= Game.rotationDir;
+
+	draw();
+	window.requestAnimationFrame(animateCardRotation);
+}
+
 function draw() {
 
 	hitRegions = {};
@@ -1329,28 +1369,29 @@ function draw() {
 			Game.newCard,
 			Game.newCardRotation,
 			x,
-			y
+			y,
+			Game.rotateOffset
 		);
 
 		// Draw UI elements
 
-		ctx.save();
-		hitCtx.save();
+		if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
+			ctx.save();
+			hitCtx.save();
 
-		ctx.translate(x, y);
-		hitCtx.translate(x, y);
+			ctx.translate(x, y);
+			hitCtx.translate(x, y);
 
-		if (Game.state == GameState.ROTATE_CARD) {
 			drawButton('confirm', CARD_WIDTH / 2, CARD_WIDTH + BUTTON_RADIUS - 3, '✓');
 			drawButton('cancel', CARD_WIDTH + 10, 0, '✗');
 
 			// (These arrow shapes are better, but are not supported in iOS: ⟲ ⟳)
 			drawButton('rotate_left', -10, CARD_WIDTH / 2 - BUTTON_RADIUS - 10, '↶');
 			drawButton('rotate_right', -10, CARD_WIDTH / 2 + BUTTON_RADIUS + 10, '↷');
-		}
 
-		hitCtx.restore();
-		ctx.restore();
+			hitCtx.restore();
+			ctx.restore();
+		}
 	}
 
 	// Draw territories
@@ -1383,7 +1424,7 @@ function draw() {
 	ctx.restore();
 }
 
-function drawCard(ctx, num, rot, x, y) {
+function drawCard(ctx, num, rot, x, y, rotateOffset) {
 
 	ctx.save();
 
@@ -1398,6 +1439,12 @@ function drawCard(ctx, num, rot, x, y) {
 	} else if (rot == 3) {
 		ctx.translate(x, y + CARD_WIDTH);
 		ctx.rotate(Math.PI * 1.5);
+	}
+
+	if (rotateOffset != 0) {
+		ctx.translate(CARD_WIDTH / 2, CARD_WIDTH / 2);
+		ctx.rotate(Math.PI * rotateOffset);
+		ctx.translate(-CARD_WIDTH / 2, -CARD_WIDTH / 2);
 	}
 
 	// Draw border
