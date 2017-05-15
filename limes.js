@@ -698,19 +698,20 @@ window.addEventListener('DOMContentLoaded', function() {
 
 // Handles action caused by button presses (HTML buttons or canvas)
 function actionHandler(action) {
+	let mapChanged = true;
+	let scoreChanged = true;
+
 	if (Game.state == GameState.PLACE_CARD) {
 		Game.newCardPosition = Point.fromImmutable(action);
 		Game.state = GameState.ROTATE_CARD;
 
 	} else if (Game.state == GameState.ROTATE_CARD) {
 		if (action == 'confirm') {
+			Game.state = GameState.PLACE_OR_MOVE_WORKER;
 			Game.addCard(Game.newCardPosition, [Game.newCard, Game.newCardRotation]);
 			Game.newCardRotation = 0;
-			Game.state = GameState.PLACE_OR_MOVE_WORKER;
-
-			// Game.newCard = null;
-			// Game.state = GameState.PLACE_CARD;
-
+			mapChanged = false;
+			scoreChanged = false;
 		} else if (action == 'cancel') {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCardRotation = 0; // TODO: Keep rotation?
@@ -724,10 +725,14 @@ function actionHandler(action) {
 
 		if (action == 'place_worker') {
 			Game.state = GameState.PLACE_WORKER;
+			mapChanged = false;
+			scoreChanged = false;
 		} else if (action == 'skip') {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
 			Game.newCardRotation = 0;
+			mapChanged = false;
+			scoreChanged = false;
 		} else if (action == 'go_back') {
 			Game.state = GameState.PLACE_CARD;
 			Game.removeCard(Game.newCardPosition);
@@ -735,13 +740,18 @@ function actionHandler(action) {
 			// Chosen a worker to move
 			Game.selectedWorker = Point.fromImmutable(action);
 			Game.state = GameState.MOVE_WORKER;
+			mapChanged = false;
+			scoreChanged = false;
 		}
 	} else if (Game.state == GameState.PLACE_WORKER) {
+		mapChanged = false;
 		if (action == 'cancel') {
 			if (Game.selectedTerritory) {
 				Game.selectedTerritory = null;
 				Game.workerSupply++;
 				Game.workers.pop();
+			} else {
+				scoreChanged = false;
 			}
 			Game.targetTerritories.clear();
 			Game.state = GameState.PLACE_OR_MOVE_WORKER;
@@ -751,6 +761,7 @@ function actionHandler(action) {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
 			Game.newCardRotation = 0;
+			scoreChanged = false;
 		} else {
 			// A territory was chosen
 			Game.selectedTerritory = Game.territories[action];
@@ -773,11 +784,14 @@ function actionHandler(action) {
 			Game.targetTerritories.clear();
 		}
 	} else if (Game.state == GameState.MOVE_WORKER) {
+		mapChanged = false;
 		if (action == 'cancel') {
 			if (Game.selectedTerritory) {
 				Game.selectedTerritory = null;
 				Game.workers.pop();
 				Game.workers.push(Game.selectedWorker);
+			} else {
+				scoreChanged = false;
 			}
 			Game.targetTerritories.clear();
 			Game.selectedWorker = null;
@@ -789,6 +803,7 @@ function actionHandler(action) {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
 			Game.newCardRotation = 0;
+			scoreChanged = false;
 		} else {
 			// A territory was chosen
 			Game.selectedTerritory = Game.territories[action];
@@ -818,10 +833,14 @@ function actionHandler(action) {
 
 	Game.updateUI();
 
-	if (Game.state != GameState.GAME_OVER) {
-		parseMap(); // TODO: Don't call this when doing UI actions that don't change the game state
+	if (mapChanged) {
+		parseMap();
+	}
+
+	if (scoreChanged) {
 		Game.calcScore();
 	}
+
 	Game.updateScore();
 
 	draw();
