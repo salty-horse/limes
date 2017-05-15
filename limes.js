@@ -464,7 +464,15 @@ let Game = {
 			this.score = this.tempScore;
 			// TODO: Score summary
 
-			ga('send', 'event', 'game', 'game_over', this.score);
+
+			// Analytics
+
+			ga('send', {
+			  hitType: 'event',
+			  eventCategory: 'game',
+			  eventAction: 'game_over',
+			  eventValue: this.score
+			});
 
 			if (this.sharedLink) {
 				ga('send', 'event', 'game', 'finished_shared_game');
