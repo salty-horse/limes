@@ -307,8 +307,8 @@ let Game = {
 		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
 		// card grid size and the minimal values - set by addCard()
-		this.sizeX = 1;
-		this.sizeY = 1;
+		this.sizeX = 0;
+		this.sizeY = 0;
 		this.minX = 0;
 		this.minY = 0;
 		this.drawSizeX = 3;
@@ -361,6 +361,46 @@ let Game = {
 		document.getElementById('share_link').value =
 			[location.protocol, '//', location.host, location.pathname, '?' + seed].join('');
 
+
+		// let allCards = {
+		// 	'0,0': [1, 0],
+		// 	'1,0': [2, 0],
+		// 	'2,0': [3, 0],
+		// 	'3,0': [4, 0],
+		// 	'4,0': [5, 0],
+		// 	'5,0': [6, 0],
+		// 	'0,1': [7, 0],
+		// 	'1,1': [8, 0],
+		// 	'2,1': [9, 0],
+		// 	'3,1': [10, 0],
+		// 	'4,1': [11, 0],
+		// 	'5,1': [12, 0],
+		// 	'0,2': [13, 0],
+		// 	'1,2': [14, 0],
+		// 	'2,2': [15, 0],
+		// 	'3,2': [16, 0],
+		// 	'4,2': [17, 0],
+		// 	'5,2': [18, 0],
+		// 	'0,3': [19, 0],
+		// 	'1,3': [20, 0],
+		// 	'2,3': [21, 0],
+		// 	'3,3': [22, 0],
+		// 	'4,3': [23, 0],
+		// 	'5,3': [24, 0],
+		// };
+		// this.originX = 0;
+		// this.originY = 0;
+		// this.sizeX = 6;
+		// this.sizeY = 4;
+		// this.minX = 0;
+		// this.minY = 0;
+		// this.drawSizeX = 6;
+		// this.drawSizeY = 4;
+		// canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
+		// canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
+		// for (let k in allCards) {
+		// 	Game.addCard(Point.fromImmutable(k), allCards[k]);
+		// }
 
 		// Draw new card
 		let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
@@ -652,34 +692,6 @@ window.addEventListener('DOMContentLoaded', function() {
 		}
 		Game.newGame();
 	}
-
-	// let allCards = {
-	// 	'0,0': [1, 0],
-	// 	'1,0': [2, 0],
-	// 	'2,0': [3, 0],
-	// 	'3,0': [4, 0],
-	// 	'4,0': [5, 0],
-	// 	'5,0': [6, 0],
-	// 	'0,1': [7, 0],
-	// 	'1,1': [8, 0],
-	// 	'2,1': [9, 0],
-	// 	'3,1': [10, 0],
-	// 	'4,1': [11, 0],
-	// 	'5,1': [12, 0],
-	// 	'0,2': [13, 0],
-	// 	'1,2': [14, 0],
-	// 	'2,2': [15, 0],
-	// 	'3,2': [16, 0],
-	// 	'4,2': [17, 0],
-	// 	'5,2': [18, 0],
-	// 	'0,3': [19, 0],
-	// 	'1,3': [20, 0],
-	// 	'2,3': [21, 0],
-	// 	'3,3': [22, 0],
-	// 	'4,3': [23, 0],
-	// 	'5,3': [24, 0],
-	// };
-	// Game.addCards(allCards);
 
 	Game.newGame(seed);
 });
