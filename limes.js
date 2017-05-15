@@ -1386,9 +1386,9 @@ function draw() {
 			drawButton('confirm', CARD_WIDTH / 2, CARD_WIDTH + BUTTON_RADIUS - 3, '✓');
 			drawButton('cancel', CARD_WIDTH + 10, 0, '✗');
 
-			// (These arrow shapes are better, but are not supported in iOS: ⟲ ⟳)
-			drawButton('rotate_left', -10, CARD_WIDTH / 2 - BUTTON_RADIUS - 10, '↶');
-			drawButton('rotate_right', -10, CARD_WIDTH / 2 + BUTTON_RADIUS + 10, '↷');
+			// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
+			drawButton('rotate_right', -10, CARD_WIDTH / 2 - BUTTON_RADIUS - 10, '↷');
+			drawButton('rotate_left', -10, CARD_WIDTH / 2 + BUTTON_RADIUS + 10, '↶');
 
 			hitCtx.restore();
 			ctx.restore();
