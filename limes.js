@@ -1189,7 +1189,7 @@ function draw() {
 
 	ctx.translate(
 		Math.floor((Game.panX - Game.originX) * (CARD_WIDTH + CARD_SPACING)),
-		Math.floor((Game.panY - Game.originY) * (CARD_WIDTH + CARD_SPACING)),
+		Math.floor((Game.panY - Game.originY) * (CARD_WIDTH + CARD_SPACING))
 	);
 
 	// No need to take panning into account because input is disabled while panning
