@@ -308,6 +308,10 @@ let Game = {
 	newGame: function(seed) {
 		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
+		// This is the initial width and height. It will grow and shrink as needed.
+		canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
+		canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
+
 		// card grid size and the minimal values - set by addCard()
 		this.sizeX = 0;
 		this.sizeY = 0;
@@ -624,9 +628,8 @@ window.addEventListener('DOMContentLoaded', function() {
 	canvas = document.getElementById('canvas');
 	ctx = canvas.getContext('2d');
 
-	// This is the initial width and height. It will grow and shrink as needed.
-	canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
-	canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
+	hitCanvas = document.createElement('canvas');
+	hitCtx = hitCanvas.getContext('2d');
 
 	hitCanvas = document.createElement('canvas');
 	hitCanvas.width = canvas.width;
