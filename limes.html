@@ -2,6 +2,8 @@
 <html>
   <head>
   <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width" />
+  <!-- <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" /> -->
   <title>LIMES</title>
   <script src="limes.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/seedrandom/2.4.3/seedrandom.min.js"></script>
@@ -21,8 +23,10 @@
 
   #display {
     height: 100vh;
-    margin-right: 200px;
+    width: 80%;
+    margin-right: 99vw;
     overflow: scroll;
+    text-align: center;
   }
 
   #canvas {
@@ -36,11 +40,18 @@
     /*height: 100%;*/
     top: 0;
     right: 0;
-    bottom: 0;
-    width: 200px; /* Makes room for card width */
-    padding-left: 20px;
-    border-left: solid black 1px;
-    background-color: white;
+    margin-left: 1vw;
+    border-left: solid black 0.1em;
+    border-bottom: solid black 0.1em;
+    /* background-color: white; */
+    background-color: none;
+    overflow: scroll;
+    width: 20%; /* Makes room for card width */
+    font-size: calc(6vw * 0.2);
+  }
+
+  #info h1 {
+    text-align: center;
   }
 
   #share_link {
@@ -50,12 +61,25 @@
   #stats {
     list-style: none;
     font-size: 150%;
+    margin-left: 0;
+    display: block;
     padding-left: 0;
+  }
+
+  #stats li {
+    padding-left: 0.2em;
+    border-left: 0.2em solid transparent;
   }
 
   #supply_button {
     display: inline-block;
   }
+
+  #supply_button.highlight {
+    border: 0.2em solid red;
+    border-style: dashed;
+  }
+
 
   #score, #new_points {
       font-size: 180%;
@@ -78,39 +102,54 @@
     vertical-align: text-bottom;
   }
 
+  #instructions {
+    padding-left: 0.2em;
+    padding-right: 0.2em;
+  }
+
   #instruction {
     display: block;
     font-size: 150%;
-    margin-top: 2em;
+    margin-top: 1em;
+  }
+
+  #instructions div {
+    text-align: center;
+  }
+
+  #new_card {
+    width: 100%;
   }
 
   #buttons {
+    display: block;
     list-style: none;
     padding-left: 0;
+    text-align: center;
+  }
+
+  #buttons li {
+    width: 100%;
+    display: inline-block;
+    margin-bottom: 2em;
+  }
+
+  #buttons li:not(:last-child) {
+    margin-bottom: 2em;
   }
 
   #buttons button, #new_game {
+    font-size: 150%;
     min-height: 3em;
-    width: 200px;
-    margin:0 20px 20px 0;
     -webkit-border-radius: 12;
     -moz-border-radius: 12;
-    border-radius: 12px;
+    border-radius: 1em;
     /*font-family: Arial; */
     color: #000000;
-    font-size: 20px;
     background: #e4ebf0;
-    padding: 10px 20px 10px 20px;
-    border: solid #1f628d 2px;
+    padding: 1em 1em 1em 1em;
+    border: solid #1f628d 0.2em;
     text-decoration: none;
-  }
-
-  .highlight {
-    border: 5px solid red;
-    margin-left: -5px;
-    margin-top: -5px;
-    margin-bottom: -5px;
-    border-style: dashed;
   }
 
   .copywrapper {
@@ -131,18 +170,20 @@
   <div id="info">
     <h1>LIMES</h1>
     Game ID: <span id="game_id"></span>
-    <div class="copywrapper"><button id="copy_button">Copy link for sharing</button><input id="share_link" type="text" onfocus="this.select()" readonly=""></div>
-    <div id="new_game_container"><button id="new_game">New Game</button></div>
     <ul id="stats">
         <li>Score: <span id="score">0</span> <span id="new_points"></span></li>
         <li id="supply_button">Supply: <span id="supply">0</span> × <img id="worker_image" src="worker.png"/></li>
     </ul>
-    <div>
+    <div id="instructions">
       <span id="instruction"></span>
-      <canvas id="new_card"></canvas>
+      <div><canvas id="new_card"></canvas></div>
       <ul id="buttons"></ul>
     </div>
   </div>
   <div id="display"><canvas id="canvas"></canvas></div>
+  <div id="settings" style="display: none;">
+    <div class="copywrapper"><button id="copy_button">Copy link for sharing</button><input id="share_link" type="text" onfocus="this.select()" readonly=""></div>
+    <div id="new_game_container"><button id="new_game">New Game</button></div>
+  </div>
   </body>
 </html>
