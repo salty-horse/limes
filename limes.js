@@ -169,6 +169,8 @@ let hitCanvas, hitCtx;
 let newCardCanvas, newCardCtx;
 let hitRegions = {};
 
+let hammertime;
+
 let workerImage;
 let WORKER_WIDTH;
 let WORKER_HEIGHT;
@@ -290,10 +292,10 @@ let Game = {
 			Game.panSpeedX = (oldX - this.originX) / PANNING_DURATION_MILLIS;
 			Game.panSpeedY = (oldY - this.originY) / PANNING_DURATION_MILLIS;
 
-			Game.panX = (this.originX - oldX);
-			Game.panY = (this.originY - oldY);
-			Game.panStartX = Game.panX;
-			Game.panStartY = Game.panY;
+			Game.animatePanX = (this.originX - oldX);
+			Game.animatePanY = (this.originY - oldY);
+			Game.panStartX = Game.animatePanX;
+			Game.panStartY = Game.animatePanY;
 
 			window.requestAnimationFrame(panCanvas);
 		} else {
@@ -320,13 +322,20 @@ let Game = {
 		this.drawSizeX = 3;
 		this.drawSizeY = 3;
 
+		this.panX = 0;
+		this.panY = 0;
+		this.dragStartPanX = 0;
+		this.dragStartPanY = 0;
+		this.scale = 1;
+		this.pinchStartScale = 0;
+
 		// Grid origin, accounting for future placements
 		this.originX = -1;
 		this.originY = -1;
 
 		// Panning animation
-		this.panX = 0;
-		this.panY = 0;
+		this.animatePanX = 0;
+		this.animatePanY = 0;
 		this.panStartX = 0;
 		this.panStartY = 0;
 		this.panStartTime = null;
@@ -628,6 +637,87 @@ window.addEventListener('DOMContentLoaded', function() {
 	canvas = document.getElementById('canvas');
 	ctx = canvas.getContext('2d');
 
+	hammertime = new Hammer(canvas);
+	hammertime.get('pan').set({ direction: Hammer.DIRECTION_ALL });
+	hammertime.get('pinch').set({ enable: true, direction: Hammer.DIRECTION_ALL });
+	
+	let dragStartPanX = null;
+	let dragStartPanY = null;
+	let pinchStartPanX = null;
+	let pinchStartPanY = null;
+	let pinchStartScale = null;
+
+	hammertime.on('pan', function(e) {
+		if (dragStartPanX == null) {
+			dragStartPanX = Game.panX;
+			dragStartPanY = Game.panY;
+		}
+		document.body.style.cursor = 'grabbing';
+		Game.panX = dragStartPanX + e.deltaX;
+		Game.panY = dragStartPanY + e.deltaY;
+		Game.preventClick = true;
+		window.requestAnimationFrame(draw);
+	});
+	
+	hammertime.on('panend', function(e) {
+		document.body.style.cursor = 'default';
+		dragStartPanX = null;
+		dragStartPanY = null;
+		setTimeout(() => { Game.preventClick = false; }, 100);
+		window.requestAnimationFrame(draw);
+	});
+
+	hammertime.on('pinch', function(e) {
+		if (pinchStartScale == null) {
+			pinchStartScale = Game.scale;
+			pinchStartPanX = Game.panX;
+			pinchStartPanY = Game.panY;
+		}
+
+		let scaleChange = e.scale - 1;
+
+		// TODO: Add max scale limit
+		if (pinchStartScale + scaleChange <= 0.5)
+			return;
+
+		Game.panX = pinchStartPanX - (e.center.x - pinchStartPanX) / pinchStartScale * scaleChange;
+		Game.panY = pinchStartPanY - (e.center.y - pinchStartPanY) / pinchStartScale * scaleChange;
+		Game.scale = pinchStartScale + scaleChange;
+		Game.preventClick = true;
+		window.requestAnimationFrame(draw);
+	});
+
+	hammertime.on('pinchend', function(e) {
+		pinchStartScale = null;
+		setTimeout(() => { Game.preventClick = false; }, 100);
+		window.requestAnimationFrame(draw);
+	});
+
+	canvas.addEventListener('wheel', function(e) {
+		const rect = canvas.getBoundingClientRect();
+		const zoomPointX = e.clientX - rect.left;
+		const zoomPointY = e.clientY - rect.top;
+
+		let scaleChange;
+		if (e.deltaY < 0) {
+			// zoom in
+			scaleChange = 0.1;
+		} else {
+			// zoom out
+			scaleChange = -0.1;
+		}
+
+		// TODO: Add max scale limit
+		if (Game.scale + scaleChange <= 0.2) {
+			return;
+		}
+
+		Game.panX -= (zoomPointX - Game.panX) / Game.scale * scaleChange;
+		Game.panY -= (zoomPointY - Game.panY) / Game.scale * scaleChange;
+		Game.scale += scaleChange;
+		window.requestAnimationFrame(draw);
+	});
+
 	hitCanvas = document.createElement('canvas');
 	hitCtx = hitCanvas.getContext('2d');
 
@@ -676,6 +766,9 @@ window.addEventListener('DOMContentLoaded', function() {
 		actionHandler(clickRegion);
 	});
 
+
+
+
 	// Enable buttons
 
 	document.getElementById('copy_button').onclick = function() {
@@ -703,11 +796,17 @@ window.addEventListener('DOMContentLoaded', function() {
 		Game.newGame();
 	}
 
-	Game.newGame(seed);
+	// Wait on 'load' since we use seedrandom
+	window.addEventListener('load', function() {
+		Game.newGame(seed);
+	});
 });
 
 // Handles action caused by button presses (HTML buttons or canvas)
 function actionHandler(action) {
+	if (Game.preventClick)
+		return;
+
 	let mapChanged = true;
 	let scoreChanged = true;
 
@@ -858,7 +957,7 @@ function actionHandler(action) {
 	Game.updateScore();
 
 	// If there's any animation in progress, let it handle drawing
-	if (Game.panX != 0 || Game.panY != 0 || Game.rotateOffset)
+	if (Game.animatePanX != 0 || Game.animatePanY != 0 || Game.rotateOffset)
 		return;
 
 	draw();
@@ -1165,15 +1264,15 @@ function panCanvas(timestamp) {
 
 	let t = timestamp - Game.panStartTime;
 
-	Game.panX = Game.panStartX + Game.panSpeedX * t;
-	Game.panY = Game.panStartY + Game.panSpeedY * t;
+	Game.animatePanX = Game.panStartX + Game.panSpeedX * t;
+	Game.animatePanY = Game.panStartY + Game.panSpeedY * t;
 
-	if (Game.panSpeedX > 0 && Game.panX > 0 ||
-	    Game.panSpeedX < 0 && Game.panX < 0 ||
-	    Game.panSpeedY > 0 && Game.panY > 0 ||
-	    Game.panSpeedY < 0 && Game.panY < 0) {
-		Game.panX = 0;
-		Game.panY = 0;
+	if (Game.panSpeedX > 0 && Game.animatePanX > 0 ||
+	    Game.panSpeedX < 0 && Game.animatePanX < 0 ||
+	    Game.panSpeedY > 0 && Game.animatePanY > 0 ||
+	    Game.panSpeedY < 0 && Game.animatePanY < 0) {
+		Game.animatePanX = 0;
+		Game.animatePanY = 0;
 		Game.panStartX = 0;
 		Game.panStartY = 0;
 		Game.panStartTime = null;
@@ -1228,12 +1327,18 @@ function draw() {
 	ctx.save();
 	hitCtx.save();
 
-	ctx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
-	hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
+	// ctx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
+	// hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
+
+	ctx.translate(Game.panX, Game.panY);
+	hitCtx.translate(Game.panX, Game.panY);
+	ctx.scale(Game.scale, Game.scale);
+	hitCtx.scale(Game.scale, Game.scale);
+
 
 	ctx.translate(
-		Math.floor((Game.panX - Game.originX) * (CARD_WIDTH + CARD_SPACING)),
-		Math.floor((Game.panY - Game.originY) * (CARD_WIDTH + CARD_SPACING))
+		Math.floor((Game.animatePanX - Game.originX) * (CARD_WIDTH + CARD_SPACING)),
+		Math.floor((Game.animatePanY - Game.originY) * (CARD_WIDTH + CARD_SPACING))
 	);
 
 	// No need to take panning into account because input is disabled while panning
@@ -1243,7 +1348,7 @@ function draw() {
 	);
 
 	// Draw placement positions
-	if (Game.panX == 0 && Game.panY == 0 &&
+	if (Game.animatePanX == 0 && Game.animatePanY == 0 &&
 	    (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD)) {
 		for (let coord of Game.nextPositions) {
 
