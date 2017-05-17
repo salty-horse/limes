@@ -286,24 +286,31 @@ let Game = {
 			Game.drawSizeY = 4;
 		}
 
-		// If the grid origin changed, start panning
+		// Pan and zoom so the entire grid fills the screen
+		let requiredWidth = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
+		let requiredHeight = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
+		let requiredScaleX = canvas.width / requiredWidth;
+		let requiredScaleY = canvas.height / requiredHeight;
+		let requiredScale = Math.min(requiredScaleX, requiredScaleY);
 
-		if (oldX != this.originX || oldY != this.originY) {
-			Game.panSpeedX = (oldX - this.originX) / PANNING_DURATION_MILLIS;
-			Game.panSpeedY = (oldY - this.originY) / PANNING_DURATION_MILLIS;
+		let requiredPanX = (-this.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+		let requiredPanY = (-this.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+		console.log(`panX: ${Game.panX}. required: ${requiredPanX}`);
+		console.log(`panY: ${Game.panY}. required: ${requiredPanY}`);
 
-			Game.animatePanX = (this.originX - oldX);
-			Game.animatePanY = (this.originY - oldY);
-			Game.panStartX = Game.animatePanX;
-			Game.panStartY = Game.animatePanY;
+		if (requiredScale != this.scale || requiredPanX != this.panX || requiredPanY != this.panY) {
+			this.animSpeedScale = (requiredScale - this.scale) / PANNING_DURATION_MILLIS;
+			this.animScale = this.animStartScale = this.scale - requiredScale;
+			this.scale = requiredScale;
 
-			window.requestAnimationFrame(panCanvas);
-		} else {
-			// Resize the canvas to fit image
-			canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
-			canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
-			hitCanvas.width = canvas.width;
-			hitCanvas.height = canvas.height;
+			this.animSpeedPanX = (requiredPanX - this.panX) / PANNING_DURATION_MILLIS;
+			this.animSpeedPanY = (requiredPanY - this.panY) / PANNING_DURATION_MILLIS;
+			this.animPanX = this.animStartPanX = this.panX - requiredPanX;
+			this.animPanY = this.animStartPanY = this.panY - requiredPanY;
+			console.log(`anim pan: (${Game.animPanX}, ${Game.animPanY})`);
+			this.panX = requiredPanX;
+			this.panY = requiredPanY;
+			window.requestAnimationFrame(panAndZoomToFit);
 		}
 	},
 
@@ -311,8 +318,8 @@ let Game = {
 		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
 		// This is the initial width and height. It will grow and shrink as needed.
-		canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
-		canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
+		// canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
+		// canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
 
 		// card grid size and the minimal values - set by addCard()
 		this.sizeX = 0;
@@ -326,19 +333,26 @@ let Game = {
 		this.panY = 0;
 		this.dragStartPanX = 0;
 		this.dragStartPanY = 0;
-		this.scale = 1;
-		this.pinchStartScale = 0;
 
 		// Grid origin, accounting for future placements
 		this.originX = -1;
 		this.originY = -1;
 
+		this.panX = 0;
+		this.panY = 0;
+		this.scale = 1;
+		resizeWindow();
+
 		// Panning animation
-		this.animatePanX = 0;
-		this.animatePanY = 0;
-		this.panStartX = 0;
-		this.panStartY = 0;
-		this.panStartTime = null;
+		this.animPanX = 0;
+		this.animPanY = 0;
+		this.animStartPanX = 0;
+		this.animStartPanY = 0;
+		this.animStartTime = null;
+
+		this.animScale = 0;
+		this.scaleStartX = 0;
+		this.scaleStartTime = null;
 
 		// Card rotation animation
 		this.rotateOffset = 0;
@@ -637,6 +651,11 @@ window.addEventListener('DOMContentLoaded', function() {
 	canvas = document.getElementById('canvas');
 	ctx = canvas.getContext('2d');
 
+	// Handled in resizeWindow.
+	// TODO: Fix so the canvas doesn't resize when the page loads since newGame and resizeWindow is called on 'load'
+	// canvas.width = canvas.parentElement.clientWidth - 20;
+	// canvas.height = canvas.parentElement.clientHeight - 20;
+
 	hammertime = new Hammer(canvas);
 	hammertime.get('pan').set({ direction: Hammer.DIRECTION_ALL });
 	hammertime.get('pinch').set({ enable: true, direction: Hammer.DIRECTION_ALL });
@@ -677,7 +696,7 @@ window.addEventListener('DOMContentLoaded', function() {
 		let scaleChange = e.scale - 1;
 
 		// TODO: Add max scale limit
-		if (pinchStartScale + scaleChange <= 0.5)
+		if (pinchStartScale + scaleChange <= 0.1)
 			return;
 
 		Game.panX = pinchStartPanX - (e.center.x - pinchStartPanX) / pinchStartScale * scaleChange;
@@ -708,7 +727,7 @@ window.addEventListener('DOMContentLoaded', function() {
 		}
 
 		// TODO: Add max scale limit
-		if (Game.scale + scaleChange <= 0.2) {
+		if (Game.scale + scaleChange <= 0.1) {
 			return;
 		}
 
@@ -719,11 +738,6 @@ window.addEventListener('DOMContentLoaded', function() {
 	});
 
 	hitCanvas = document.createElement('canvas');
-	hitCtx = hitCanvas.getContext('2d');
-
-	hitCanvas = document.createElement('canvas');
-	hitCanvas.width = canvas.width;
-	hitCanvas.height = canvas.height;
 	hitCtx = hitCanvas.getContext('2d');
 
 	newCardCanvas = document.getElementById('new_card');
@@ -801,6 +815,24 @@ window.addEventListener('DOMContentLoaded', function() {
 		Game.newGame(seed);
 	});
 });
+
+window.addEventListener('resize', resizeWindow);
+
+function resizeWindow() {
+	canvas.width = canvas.parentElement.clientWidth - 20;
+	canvas.height = canvas.parentElement.clientHeight - 20;
+
+	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_OFFSET * 2 + 10;
+	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_OFFSET * 2 + 10;
+	let requiredScaleX = canvas.width / requiredWidth;
+	let requiredScaleY = canvas.height / requiredHeight;
+	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
+	Game.scale = requiredScale;
+
+	Game.panX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+	Game.panY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+	window.requestAnimationFrame(draw);
+}
 
 // Handles action caused by button presses (HTML buttons or canvas)
 function actionHandler(action) {
@@ -957,7 +989,7 @@ function actionHandler(action) {
 	Game.updateScore();
 
 	// If there's any animation in progress, let it handle drawing
-	if (Game.animatePanX != 0 || Game.animatePanY != 0 || Game.rotateOffset)
+	if (Game.animPanX != 0 || Game.animPanY != 0 || Game.rotateOffset)
 		return;
 
 	draw();
@@ -1257,38 +1289,36 @@ function getZoneCornersInCanvas(pos, margin = 0) {
 	];
 }
 
-function panCanvas(timestamp) {
-	if (Game.panStartTime == null) {
-		Game.panStartTime = timestamp;
+function panAndZoomToFit(timestamp) {
+	if (Game.animStartTime == null) {
+		Game.animStartTime = timestamp;
 	}
+	console.log(`Panning x at speed ${Game.animSpeedPanX}. ${Game.animPanX} -> 0`);
 
-	let t = timestamp - Game.panStartTime;
+	let t = timestamp - Game.animStartTime;
 
-	Game.animatePanX = Game.panStartX + Game.panSpeedX * t;
-	Game.animatePanY = Game.panStartY + Game.panSpeedY * t;
+	Game.animScale = Game.animStartScale + Game.animSpeedScale * t;
+	Game.animPanX = Game.animStartPanX + Game.animSpeedPanX * t;
+	Game.animPanY = Game.animStartPanY + Game.animSpeedPanY * t;
 
-	if (Game.panSpeedX > 0 && Game.animatePanX > 0 ||
-	    Game.panSpeedX < 0 && Game.animatePanX < 0 ||
-	    Game.panSpeedY > 0 && Game.animatePanY > 0 ||
-	    Game.panSpeedY < 0 && Game.animatePanY < 0) {
-		Game.animatePanX = 0;
-		Game.animatePanY = 0;
-		Game.panStartX = 0;
-		Game.panStartY = 0;
-		Game.panStartTime = null;
-
-		// Resize the canvas to fit image
-		canvas.width = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_OFFSET * 2 + 10;
-		canvas.height = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_OFFSET * 2 + 10;
-		hitCanvas.width = canvas.width;
-		hitCanvas.height = canvas.height;
-
+	if (Game.animSpeedScale > 0 && Game.animScale >= 0 ||
+	    Game.animSpeedScale < 0 && Game.animScale <= 0 ||
+	    Game.animSpeedPanX > 0 && Game.animPanX > 0 ||
+	    Game.animSpeedPanX < 0 && Game.animPanX < 0 ||
+	    Game.animSpeedPanY > 0 && Game.animPanY > 0 ||
+	    Game.animSpeedPanY < 0 && Game.animPanY < 0) {
+		console.log('Done pan and zoom');
+		
+		Game.animScale = 0;
+		Game.animPanX = 0;
+		Game.animPanY = 0;
+		Game.animStartTime = null;
 		draw();
 		return;
 	}
 
 	draw();
-	window.requestAnimationFrame(panCanvas);
+	window.requestAnimationFrame(panAndZoomToFit);
 }
 
 function animateCardRotation(timestamp) {
@@ -1318,11 +1348,11 @@ function animateCardRotation(timestamp) {
 }
 
 function draw() {
-
 	hitRegions = {};
 
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
-	hitCtx.clearRect(0, 0, canvas.width, canvas.height);
+	hitCanvas.width = canvas.width;
+	hitCanvas.height = canvas.height;
 
 	ctx.save();
 	hitCtx.save();
@@ -1330,25 +1360,15 @@ function draw() {
 	// ctx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
 	// hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
 
-	ctx.translate(Game.panX, Game.panY);
+	ctx.translate(Game.panX + Game.animPanX, Game.panY + Game.animPanY);
+	ctx.scale(Game.scale + Game.animScale, Game.scale + Game.animScale);
+
+	// No need to take animation into account because input is disabled while animating
 	hitCtx.translate(Game.panX, Game.panY);
-	ctx.scale(Game.scale, Game.scale);
 	hitCtx.scale(Game.scale, Game.scale);
 
-
-	ctx.translate(
-		Math.floor((Game.animatePanX - Game.originX) * (CARD_WIDTH + CARD_SPACING)),
-		Math.floor((Game.animatePanY - Game.originY) * (CARD_WIDTH + CARD_SPACING))
-	);
-
-	// No need to take panning into account because input is disabled while panning
-	hitCtx.translate(
-		-Game.originX * (CARD_WIDTH + CARD_SPACING),
-		-Game.originY * (CARD_WIDTH + CARD_SPACING)
-	);
-
 	// Draw placement positions
-	if (Game.animatePanX == 0 && Game.animatePanY == 0 &&
+	if (Game.animStartTime == null &&
 	    (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD)) {
 		for (let coord of Game.nextPositions) {
 
@@ -1483,6 +1503,7 @@ function draw() {
 		);
 
 		// Draw UI elements
+		// TODO: Scale buttons
 
 		if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
 			ctx.save();
