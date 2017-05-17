@@ -285,33 +285,6 @@ let Game = {
 			this.originY = this.minY;
 			Game.drawSizeY = 4;
 		}
-
-		// Pan and zoom so the entire grid fills the screen
-		let requiredWidth = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
-		let requiredHeight = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
-		let requiredScaleX = canvas.width / requiredWidth;
-		let requiredScaleY = canvas.height / requiredHeight;
-		let requiredScale = Math.min(requiredScaleX, requiredScaleY);
-
-		let requiredPanX = (-this.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
-		let requiredPanY = (-this.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
-		console.log(`panX: ${Game.panX}. required: ${requiredPanX}`);
-		console.log(`panY: ${Game.panY}. required: ${requiredPanY}`);
-
-		if (requiredScale != this.scale || requiredPanX != this.panX || requiredPanY != this.panY) {
-			this.animSpeedScale = (requiredScale - this.scale) / PANNING_DURATION_MILLIS;
-			this.animScale = this.animStartScale = this.scale - requiredScale;
-			this.scale = requiredScale;
-
-			this.animSpeedPanX = (requiredPanX - this.panX) / PANNING_DURATION_MILLIS;
-			this.animSpeedPanY = (requiredPanY - this.panY) / PANNING_DURATION_MILLIS;
-			this.animPanX = this.animStartPanX = this.panX - requiredPanX;
-			this.animPanY = this.animStartPanY = this.panY - requiredPanY;
-			console.log(`anim pan: (${Game.animPanX}, ${Game.animPanY})`);
-			this.panX = requiredPanX;
-			this.panY = requiredPanY;
-			window.requestAnimationFrame(panAndZoomToFit);
-		}
 	},
 
 	newGame: function(seed) {
@@ -471,7 +444,8 @@ let Game = {
 					this.score = this.tempScore;
 				}
 			}
-			instruction_label.textContent = 'Place the card:';
+			panAndZoomToFit();
+			instruction_label.textContent = 'Place the card';
 			clearHTMLButtons();
 
 		} else if (this.state == GameState.PLACE_OR_MOVE_WORKER) {
@@ -667,6 +641,8 @@ window.addEventListener('DOMContentLoaded', function() {
 	let pinchStartScale = null;
 
 	hammertime.on('pan', function(e) {
+		if (Game.animStartTime != null)
+			return;
 		if (dragStartPanX == null) {
 			dragStartPanX = Game.panX;
 			dragStartPanY = Game.panY;
@@ -687,6 +663,8 @@ window.addEventListener('DOMContentLoaded', function() {
 	});
 
 	hammertime.on('pinch', function(e) {
+		if (Game.animStartTime != null)
+			return;
 		if (pinchStartScale == null) {
 			pinchStartScale = Game.scale;
 			pinchStartPanX = Game.panX;
@@ -713,6 +691,9 @@ window.addEventListener('DOMContentLoaded', function() {
 	});
 
 	canvas.addEventListener('wheel', function(e) {
+		if (Game.animStartTime != null)
+			return;
+
 		const rect = canvas.getBoundingClientRect();
 		const zoomPointX = e.clientX - rect.left;
 		const zoomPointY = e.clientY - rect.top;
@@ -1289,11 +1270,36 @@ function getZoneCornersInCanvas(pos, margin = 0) {
 	];
 }
 
-function panAndZoomToFit(timestamp) {
+function panAndZoomToFit() {
+	// Pan and zoom so the entire grid fills the screen
+	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_OFFSET * 2 + 10;
+	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_OFFSET * 2 + 10;
+	let requiredScaleX = canvas.width / requiredWidth;
+	let requiredScaleY = canvas.height / requiredHeight;
+	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
+
+	let requiredPanX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+	let requiredPanY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+
+	if (requiredScale != Game.scale || requiredPanX != Game.panX || requiredPanY != Game.panY) {
+		Game.animSpeedScale = (requiredScale - Game.scale) / PANNING_DURATION_MILLIS;
+		Game.animScale = Game.animStartScale = Game.scale - requiredScale;
+		Game.scale = requiredScale;
+
+		Game.animSpeedPanX = (requiredPanX - Game.panX) / PANNING_DURATION_MILLIS;
+		Game.animSpeedPanY = (requiredPanY - Game.panY) / PANNING_DURATION_MILLIS;
+		Game.animPanX = Game.animStartPanX = Game.panX - requiredPanX;
+		Game.animPanY = Game.animStartPanY = Game.panY - requiredPanY;
+		Game.panX = requiredPanX;
+		Game.panY = requiredPanY;
+		window.requestAnimationFrame(animatePanAndZoom);
+	}
+}
+
+function animatePanAndZoom(timestamp) {
 	if (Game.animStartTime == null) {
 		Game.animStartTime = timestamp;
 	}
-	console.log(`Panning x at speed ${Game.animSpeedPanX}. ${Game.animPanX} -> 0`);
 
 	let t = timestamp - Game.animStartTime;
 
@@ -1307,7 +1313,6 @@ function panAndZoomToFit(timestamp) {
 	    Game.animSpeedPanX < 0 && Game.animPanX < 0 ||
 	    Game.animSpeedPanY > 0 && Game.animPanY > 0 ||
 	    Game.animSpeedPanY < 0 && Game.animPanY < 0) {
-		console.log('Done pan and zoom');
 		
 		Game.animScale = 0;
 		Game.animPanX = 0;
@@ -1318,7 +1323,7 @@ function panAndZoomToFit(timestamp) {
 	}
 
 	draw();
-	window.requestAnimationFrame(panAndZoomToFit);
+	window.requestAnimationFrame(animatePanAndZoom);
 }
 
 function animateCardRotation(timestamp) {
@@ -1368,8 +1373,7 @@ function draw() {
 	hitCtx.scale(Game.scale, Game.scale);
 
 	// Draw placement positions
-	if (Game.animStartTime == null &&
-	    (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD)) {
+	if (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD) {
 		for (let coord of Game.nextPositions) {
 
 			if (coord.equals(Game.newCardPosition) && Game.state == GameState.ROTATE_CARD)
@@ -1391,7 +1395,7 @@ function draw() {
 			);
 			ctx.lineJoin = 'miter';
 
-			if (Game.state == GameState.PLACE_CARD) {
+			if (Game.state == GameState.PLACE_CARD && Game.animStartTime == null) {
 				let hitRegionColor = getNewHitRegion(coord.toImmutable());
 				hitCtx.fillStyle = hitRegionColor;
 				hitCtx.lineWidth = BORDER_WIDTH / 4;
