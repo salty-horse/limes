@@ -1446,7 +1446,9 @@ function draw() {
 			card_info[0],
 			card_info[1],
 			x,
-			y
+			y,
+			/* rotateOffset= */0,
+			/* highlight= */coord.equals(Game.newCardPosition)
 		);
 	}
 
@@ -1528,7 +1530,8 @@ function draw() {
 			Game.newCardInfo[1],
 			x,
 			y,
-			Game.rotateOffset
+			Game.rotateOffset,
+			/* highlight= */true
 		);
 	}
 
@@ -1565,7 +1568,7 @@ function draw() {
 	}
 }
 
-function drawCard(ctx, num, rot, x, y, rotateOffset) {
+function drawCard(ctx, num, rot, x, y, rotateOffset, highlight) {
 
 	ctx.save();
 
@@ -1582,10 +1585,26 @@ function drawCard(ctx, num, rot, x, y, rotateOffset) {
 		ctx.rotate(Math.PI * 1.5);
 	}
 
-	if (rotateOffset != 0) {
+	if (rotateOffset !== undefined && rotateOffset != 0) {
 		ctx.translate(CARD_WIDTH / 2, CARD_WIDTH / 2);
 		ctx.rotate(Math.PI * rotateOffset);
 		ctx.translate(-CARD_WIDTH / 2, -CARD_WIDTH / 2);
+	}
+
+	// Draw highlight
+	if (highlight && Game.state == GameState.ROTATE_CARD) {
+		ctx.strokeStyle = 'orange';
+		ctx.lineWidth = 4;
+		ctx.lineJoin = 'round';
+		ctx.setLineDash([8, 4]);
+		ctx.strokeRect(
+			BORDER_WIDTH / 2 - 4,
+			BORDER_WIDTH / 2 - 4,
+			CARD_WIDTH - BORDER_WIDTH + 8,
+			CARD_WIDTH - BORDER_WIDTH + 8
+		);
+		ctx.lineJoin = 'miter';
+		ctx.setLineDash([]);
 	}
 
 	// Draw border
