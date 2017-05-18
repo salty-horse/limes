@@ -311,6 +311,8 @@ let Game = {
 		// This is the initial width and height. It will grow and shrink as needed.
 		canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
 		canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
+		hitCanvas.width = canvas.width;
+		hitCanvas.height = canvas.height;
 
 		// card grid size and the minimal values - set by addCard()
 		this.sizeX = 0;
@@ -632,8 +634,6 @@ window.addEventListener('DOMContentLoaded', function() {
 	hitCtx = hitCanvas.getContext('2d');
 
 	hitCanvas = document.createElement('canvas');
-	hitCanvas.width = canvas.width;
-	hitCanvas.height = canvas.height;
 	hitCtx = hitCanvas.getContext('2d');
 
 	newCardCanvas = document.getElementById('new_card');
