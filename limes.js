@@ -8,11 +8,11 @@ const ZONE_WIDTH = CARD_WIDTH / 2 - BORDER_WIDTH - INNER_BORDER_WIDTH / 2;
 const BORDER_COLOR = '#547062';
 const HUT_COLOR = '#5182ad';
 const HUT_WIDTH = Math.round(ZONE_WIDTH / 4);
-const BUTTON_RADIUS = CARD_WIDTH * 0.15;
-const CANVAS_MARGIN = BUTTON_RADIUS * 2 - 10;
+const CANVAS_MARGIN = 10;
 const PANNING_DURATION_MILLIS = 200;
 const ROTATION_DURATION_MILLIS = 150;
 const PATH_MARGIN = BORDER_WIDTH / 2;
+var BUTTON_RADIUS; // Set by resizeWindow
 
 
 class Point {
@@ -790,6 +790,8 @@ window.addEventListener('DOMContentLoaded', function() {
 window.addEventListener('resize', resizeWindow);
 
 function resizeWindow() {
+	BUTTON_RADIUS = window.innerHeight / 10;
+
 	let minX, minY, sizeX, sizeY;
 	if (Game.zoomIncludeFuture) {
 		minX = Game.futureMinX;
@@ -1524,27 +1526,6 @@ function draw() {
 			y,
 			Game.rotateOffset
 		);
-
-		// Draw UI elements
-		// TODO: Scale buttons
-
-		if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
-			ctx.save();
-			hitCtx.save();
-
-			ctx.translate(x, y);
-			hitCtx.translate(x, y);
-
-			// drawButton('confirm', CARD_WIDTH / 2, CARD_WIDTH + BUTTON_RADIUS - 3, '✓');
-			// drawButton('cancel', CARD_WIDTH + 10, 0, '✗');
-
-			// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
-			drawButton('rotate_right', -10, CARD_WIDTH / 2 - BUTTON_RADIUS - 10, '↷');
-			drawButton('rotate_left', -10, CARD_WIDTH / 2 + BUTTON_RADIUS + 10, '↶');
-
-			hitCtx.restore();
-			ctx.restore();
-		}
 	}
 
 	// Draw territories
@@ -1570,6 +1551,14 @@ function draw() {
 
 	hitCtx.restore();
 	ctx.restore();
+
+	// Draw rotation buttons on the left edge of the canvas
+
+	if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
+		// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
+		drawButton('rotate_right', BUTTON_RADIUS + 10, canvas.height / 3, '↷');
+		drawButton('rotate_left', BUTTON_RADIUS + 10, canvas.height * 2 / 3, '↶');
+	}
 }
 
 function drawCard(ctx, num, rot, x, y, rotateOffset) {
