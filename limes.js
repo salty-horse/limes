@@ -9,7 +9,7 @@ const BORDER_COLOR = '#547062';
 const HUT_COLOR = '#5182ad';
 const HUT_WIDTH = Math.round(ZONE_WIDTH / 4);
 const BUTTON_RADIUS = CARD_WIDTH * 0.15;
-const CANVAS_OFFSET = BUTTON_RADIUS * 2 - 10;
+const CANVAS_MARGIN = BUTTON_RADIUS * 2 - 10;
 const PANNING_DURATION_MILLIS = 200;
 const ROTATION_DURATION_MILLIS = 150;
 const PATH_MARGIN = BORDER_WIDTH / 2;
@@ -290,10 +290,6 @@ let Game = {
 	newGame: function(seed) {
 		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
-		// This is the initial width and height. It will grow and shrink as needed.
-		// canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
-		// canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
-
 		// card grid size and the minimal values - set by addCard()
 		this.sizeX = 0;
 		this.sizeY = 0;
@@ -403,8 +399,8 @@ let Game = {
 		// this.minY = 0;
 		// this.drawSizeX = 6;
 		// this.drawSizeY = 4;
-		// canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
-		// canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
+		// canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_MARGIN * 2 + 10;
+		// canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_MARGIN * 2 + 10;
 		// for (let k in allCards) {
 		// 	Game.addCard(Point.fromImmutable(k), allCards[k]);
 		// }
@@ -701,10 +697,10 @@ window.addEventListener('DOMContentLoaded', function() {
 		let scaleChange;
 		if (e.deltaY < 0) {
 			// zoom in
-			scaleChange = 0.1;
+			scaleChange = 0.2;
 		} else {
 			// zoom out
-			scaleChange = -0.1;
+			scaleChange = -0.2;
 		}
 
 		// TODO: Add max scale limit
@@ -761,9 +757,6 @@ window.addEventListener('DOMContentLoaded', function() {
 		actionHandler(clickRegion);
 	});
 
-
-
-
 	// Enable buttons
 
 	document.getElementById('copy_button').onclick = function() {
@@ -803,15 +796,15 @@ function resizeWindow() {
 	canvas.width = canvas.parentElement.clientWidth - 20;
 	canvas.height = canvas.parentElement.clientHeight - 20;
 
-	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_OFFSET * 2 + 10;
-	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_OFFSET * 2 + 10;
+	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_MARGIN * 2 + 10;
+	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_MARGIN * 2 + 10;
 	let requiredScaleX = canvas.width / requiredWidth;
 	let requiredScaleY = canvas.height / requiredHeight;
 	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
 	Game.scale = requiredScale;
 
-	Game.panX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
-	Game.panY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+	Game.panX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
+	Game.panY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
 	window.requestAnimationFrame(draw);
 }
 
@@ -1272,14 +1265,14 @@ function getZoneCornersInCanvas(pos, margin = 0) {
 
 function panAndZoomToFit() {
 	// Pan and zoom so the entire grid fills the screen
-	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_OFFSET * 2 + 10;
-	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_OFFSET * 2 + 10;
+	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_MARGIN * 2 + 10;
+	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_MARGIN * 2 + 10;
 	let requiredScaleX = canvas.width / requiredWidth;
 	let requiredScaleY = canvas.height / requiredHeight;
 	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
 
-	let requiredPanX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
-	let requiredPanY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_OFFSET) * requiredScale;
+	let requiredPanX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
+	let requiredPanY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
 
 	if (requiredScale != Game.scale || requiredPanX != Game.panX || requiredPanY != Game.panY) {
 		Game.animSpeedScale = (requiredScale - Game.scale) / PANNING_DURATION_MILLIS;
@@ -1361,9 +1354,6 @@ function draw() {
 
 	ctx.save();
 	hitCtx.save();
-
-	// ctx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
-	// hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
 
 	ctx.translate(Game.panX + Game.animPanX, Game.panY + Game.animPanY);
 	ctx.scale(Game.scale + Game.animScale, Game.scale + Game.animScale);
