@@ -803,10 +803,16 @@ function getScreenMeasurements() {
 		sizeY = Game.sizeY;
 	}
 
+	// Don't zoom in more than a 3x3 grid
+	let scaleSizeX = Math.max(sizeX, 3);
+	let scaleSizeY = Math.max(sizeY, 3);
+
+	let scaleWidth = (CARD_WIDTH + CARD_SPACING) * scaleSizeX - CARD_SPACING + CANVAS_MARGIN * 2;
+	let scaleHeight = (CARD_WIDTH + CARD_SPACING) * scaleSizeY - CARD_SPACING + CANVAS_MARGIN * 2;
 	let width = (CARD_WIDTH + CARD_SPACING) * sizeX - CARD_SPACING + CANVAS_MARGIN * 2;
 	let height = (CARD_WIDTH + CARD_SPACING) * sizeY - CARD_SPACING + CANVAS_MARGIN * 2;
-	let scaleX = canvas.width / width;
-	let scaleY = canvas.height / height;
+	let scaleX = canvas.width / scaleWidth;
+	let scaleY = canvas.height / scaleHeight;
 	let scale = Math.min(scaleX, scaleY);
 
 	let panX = (canvas.width - width * scale) / 2 + CANVAS_MARGIN * scale;
