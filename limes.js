@@ -266,50 +266,46 @@ let Game = {
 			}
 		}
 
-		let oldX = this.originX;
-		let oldY = this.originY;
+		let oldX = this.futureMinX;
+		let oldY = this.futureMinY;
 
 		// Calculate new grid origin
 		if (this.sizeX < 4) {
-			this.originX = this.minX - 1;
-			Game.drawSizeX = Game.sizeX + 2;
+			this.futureMinX = this.minX - 1;
+			Game.futureSizeX = Game.sizeX + 2;
 		} else {
-			this.originX = this.minX;
-			Game.drawSizeX = 4;
+			this.futureMinX = this.minX;
+			Game.futureSizeX = 4;
 		}
 
 		if (this.sizeY < 4) {
-			this.originY = this.minY - 1;
-			Game.drawSizeY = Game.sizeY + 2;
+			this.futureMinY = this.minY - 1;
+			Game.futureSizeY = Game.sizeY + 2;
 		} else {
-			this.originY = this.minY;
-			Game.drawSizeY = 4;
+			this.futureMinY = this.minY;
+			Game.futureSizeY = 4;
 		}
 	},
 
 	newGame: function(seed) {
 		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
-		// card grid size and the minimal values - set by addCard()
-		this.sizeX = 0;
-		this.sizeY = 0;
+		// Card grid minimum and size values, not accounting for future placements
 		this.minX = 0;
 		this.minY = 0;
-		this.drawSizeX = 3;
-		this.drawSizeY = 3;
+		this.sizeX = 0;
+		this.sizeY = 0;
 
-		this.panX = 0;
-		this.panY = 0;
-		this.dragStartPanX = 0;
-		this.dragStartPanY = 0;
-
-		// Grid origin, accounting for future placements
-		this.originX = -1;
-		this.originY = -1;
+		// Card grid minimum and size values, accounting for future placements
+		this.futureMinX = -1;
+		this.futureMinY = -1;
+		this.futureSizeX = 3;
+		this.futureSizeY = 3;
 
 		this.panX = 0;
 		this.panY = 0;
 		this.scale = 1;
+		this.zoomIncludeFuture = true;
 		resizeWindow();
 
 		// Panning animation
@@ -330,7 +326,7 @@ let Game = {
 
 		this.newCard = null;
 		this.newCardPosition = new Point(0, 0);
-		this.newCardRotation = 0;
+		this.newCardInfo = null;
 
 		this.workerSupply = 7;
 
@@ -391,16 +387,16 @@ let Game = {
 		// 	'4,3': [23, 0],
 		// 	'5,3': [24, 0],
 		// };
-		// this.originX = 0;
-		// this.originY = 0;
+		// this.futureMinX = 0;
+		// this.futureMinY = 0;
 		// this.sizeX = 6;
 		// this.sizeY = 4;
 		// this.minX = 0;
 		// this.minY = 0;
-		// this.drawSizeX = 6;
-		// this.drawSizeY = 4;
-		// canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_MARGIN * 2 + 10;
-		// canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_MARGIN * 2 + 10;
+		// this.futureSizeX = 6;
+		// this.futureSizeY = 4;
+		// canvas.width = (CARD_WIDTH + CARD_SPACING) * this.futureSizeX + CANVAS_MARGIN * 2 + 10;
+		// canvas.height = (CARD_WIDTH + CARD_SPACING) * this.futureSizeY + CANVAS_MARGIN * 2 + 10;
 		// for (let k in allCards) {
 		// 	Game.addCard(Point.fromImmutable(k), allCards[k]);
 		// }
@@ -440,9 +436,14 @@ let Game = {
 					this.score = this.tempScore;
 				}
 			}
+			this.zoomIncludeFuture = true;
 			panAndZoomToFit();
 			instruction_label.textContent = 'Place the card';
 			clearHTMLButtons();
+
+		} else if (this.state == GameState.ROTATE_CARD) {
+			addHTMLButton('cancel', 'Undo');
+			addHTMLButton('confirm', 'Confirm');
 
 		} else if (this.state == GameState.PLACE_OR_MOVE_WORKER) {
 			let instruction_text;
@@ -506,6 +507,8 @@ let Game = {
 		if (this.state == GameState.GAME_OVER) {
 			instruction_label.textContent = 'Game over!';
 			this.score = this.tempScore;
+			this.zoomIncludeFuture = true;
+			panAndZoomToFit();
 			// TODO: Score summary
 
 
@@ -523,13 +526,7 @@ let Game = {
 			}
 		}
 
-		if (this.state == GameState.PLACE_CARD) {
-			newCardCanvas.hidden = false;
-		}
-
-		if (this.state != GameState.PLACE_CARD && this.state != GameState.ROTATE_CARD) {
-			newCardCanvas.hidden = true;
-		}
+		newCardCanvas.hidden = (this.state != GameState.PLACE_CARD);
 
 		document.getElementById('supply').textContent = this.workerSupply;
 	},
@@ -793,18 +790,33 @@ window.addEventListener('DOMContentLoaded', function() {
 window.addEventListener('resize', resizeWindow);
 
 function resizeWindow() {
-	canvas.width = canvas.parentElement.clientWidth - 20;
+	let minX, minY, sizeX, sizeY;
+	if (Game.zoomIncludeFuture) {
+		minX = Game.futureMinX;
+		minY = Game.futureMinY;
+		sizeX = Game.futureSizeX;
+		sizeY = Game.futureSizeY;
+	} else {
+		minX = Game.minX;
+		minY = Game.minY;
+		sizeX = Game.sizeX;
+		sizeY = Game.sizeY;
+	}
+
+	canvas.width = canvas.parentElement.clientWidth;
 	canvas.height = canvas.parentElement.clientHeight - 20;
 
-	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_MARGIN * 2 + 10;
-	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_MARGIN * 2 + 10;
+	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * sizeX - CARD_SPACING + CANVAS_MARGIN * 2;
+	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * sizeY - CARD_SPACING + CANVAS_MARGIN * 2;
 	let requiredScaleX = canvas.width / requiredWidth;
 	let requiredScaleY = canvas.height / requiredHeight;
 	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
 	Game.scale = requiredScale;
 
-	Game.panX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
-	Game.panY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
+	Game.panX = (canvas.width - requiredWidth * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
+	Game.panY = (canvas.height - requiredHeight * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
+	Game.panX -= (CARD_WIDTH + CARD_SPACING) * minX * requiredScale;
+	Game.panY -= (CARD_WIDTH + CARD_SPACING) * minY * requiredScale;
 	window.requestAnimationFrame(draw);
 }
 
@@ -819,23 +831,25 @@ function actionHandler(action) {
 	if (Game.state == GameState.PLACE_CARD) {
 		Game.newCardPosition = Point.fromImmutable(action);
 		Game.state = GameState.ROTATE_CARD;
+		Game.newCardInfo = [Game.newCard, 0];
+		Game.addCard(Game.newCardPosition, Game.newCardInfo);
+		Game.zoomIncludeFuture = false;
+		panAndZoomToFit();
 
 	} else if (Game.state == GameState.ROTATE_CARD) {
 		if (action == 'confirm') {
 			Game.state = GameState.PLACE_OR_MOVE_WORKER;
-			Game.addCard(Game.newCardPosition, [Game.newCard, Game.newCardRotation]);
-			Game.newCardRotation = 0;
 			mapChanged = false;
 			scoreChanged = false;
 		} else if (action == 'cancel') {
 			Game.state = GameState.PLACE_CARD;
-			Game.newCardRotation = 0; // TODO: Keep rotation?
+			Game.removeCard(Game.newCardPosition);
 		} else if (action == 'rotate_left') {
-			Game.newCardRotation = (Game.newCardRotation + 3) % 4;
+			Game.newCardInfo[1] = (Game.newCardInfo[1] + 3) % 4;
 			Game.rotationDir = 1;
 			window.requestAnimationFrame(animateCardRotation);
 		} else if (action == 'rotate_right') {
-			Game.newCardRotation = (Game.newCardRotation + 1) % 4;
+			Game.newCardInfo[1] = (Game.newCardInfo[1] + 1) % 4;
 			Game.rotationDir = -1;
 			window.requestAnimationFrame(animateCardRotation);
 		}
@@ -849,7 +863,6 @@ function actionHandler(action) {
 		} else if (action == 'skip') {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
-			Game.newCardRotation = 0;
 			mapChanged = false;
 			scoreChanged = false;
 		} else if (action == 'go_back') {
@@ -879,7 +892,6 @@ function actionHandler(action) {
 			Game.selectedTerritory = null;
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
-			Game.newCardRotation = 0;
 			scoreChanged = false;
 		} else {
 			// A territory was chosen
@@ -921,7 +933,6 @@ function actionHandler(action) {
 			Game.selectedWorker = null;
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
-			Game.newCardRotation = 0;
 			scoreChanged = false;
 		} else {
 			// A territory was chosen
@@ -1014,10 +1025,6 @@ function parseMap() {
 
 	for (let [coord, [num, rotation]] of Game.cards) {
 		addCardToGrid(coord, num, rotation);
-	}
-
-	if (Game.state == GameState.ROTATE_CARD) {
-		addCardToGrid(Game.newCardPosition, Game.newCard, Game.newCardRotation);
 	}
 
 	// Collect zones into territories
@@ -1264,15 +1271,31 @@ function getZoneCornersInCanvas(pos, margin = 0) {
 }
 
 function panAndZoomToFit() {
+
+	let minX, minY, sizeX, sizeY;
+	if (Game.zoomIncludeFuture) {
+		minX = Game.futureMinX;
+		minY = Game.futureMinY;
+		sizeX = Game.futureSizeX;
+		sizeY = Game.futureSizeY;
+	} else {
+		minX = Game.minX;
+		minY = Game.minY;
+		sizeX = Game.sizeX;
+		sizeY = Game.sizeY;
+	}
+
 	// Pan and zoom so the entire grid fills the screen
-	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_MARGIN * 2 + 10;
-	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_MARGIN * 2 + 10;
+	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * sizeX - CARD_SPACING + CANVAS_MARGIN * 2;
+	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * sizeY - CARD_SPACING + CANVAS_MARGIN * 2;
 	let requiredScaleX = canvas.width / requiredWidth;
 	let requiredScaleY = canvas.height / requiredHeight;
 	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
 
-	let requiredPanX = (-Game.originX * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
-	let requiredPanY = (-Game.originY * (CARD_WIDTH + CARD_SPACING) + CANVAS_MARGIN) * requiredScale;
+	let requiredPanX = (canvas.width - requiredWidth * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
+	let requiredPanY = (canvas.height - requiredHeight * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
+	requiredPanX -= (CARD_WIDTH + CARD_SPACING) * minX * requiredScale;
+	requiredPanY -= (CARD_WIDTH + CARD_SPACING) * minY * requiredScale;
 
 	if (requiredScale != Game.scale || requiredPanX != Game.panX || requiredPanY != Game.panY) {
 		Game.animSpeedScale = (requiredScale - Game.scale) / PANNING_DURATION_MILLIS;
@@ -1362,11 +1385,13 @@ function draw() {
 	hitCtx.translate(Game.panX, Game.panY);
 	hitCtx.scale(Game.scale, Game.scale);
 
+	// The canvas's 0,0 is now the top left corner of the first card (pos 0,0)
+
 	// Draw placement positions
 	if (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD) {
 		for (let coord of Game.nextPositions) {
 
-			if (coord.equals(Game.newCardPosition) && Game.state == GameState.ROTATE_CARD)
+			if ( Game.state == GameState.ROTATE_CARD && coord.equals(Game.newCardPosition))
 				continue;
 
 			if (Game.state == GameState.PLACE_CARD) {
@@ -1404,6 +1429,10 @@ function draw() {
 	// Draw cards
 
 	for (let [coord, card_info] of Game.cards) {
+		// Skip newly-placed card, which we draw later
+		if (Game.state == GameState.ROTATE_CARD && coord.equals(Game.newCardPosition))
+			continue;
+
 		let x = coord.x * (CARD_WIDTH + CARD_SPACING);
 		let y = coord.y * (CARD_WIDTH + CARD_SPACING);
 		drawCard(
@@ -1490,7 +1519,7 @@ function draw() {
 		drawCard(
 			ctx,
 			Game.newCard,
-			Game.newCardRotation,
+			Game.newCardInfo[1],
 			x,
 			y,
 			Game.rotateOffset
@@ -1506,8 +1535,8 @@ function draw() {
 			ctx.translate(x, y);
 			hitCtx.translate(x, y);
 
-			drawButton('confirm', CARD_WIDTH / 2, CARD_WIDTH + BUTTON_RADIUS - 3, '✓');
-			drawButton('cancel', CARD_WIDTH + 10, 0, '✗');
+			// drawButton('confirm', CARD_WIDTH / 2, CARD_WIDTH + BUTTON_RADIUS - 3, '✓');
+			// drawButton('cancel', CARD_WIDTH + 10, 0, '✗');
 
 			// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
 			drawButton('rotate_right', -10, CARD_WIDTH / 2 - BUTTON_RADIUS - 10, '↷');
