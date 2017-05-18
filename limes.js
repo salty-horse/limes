@@ -789,9 +789,7 @@ window.addEventListener('DOMContentLoaded', function() {
 
 window.addEventListener('resize', resizeWindow);
 
-function resizeWindow() {
-	BUTTON_RADIUS = window.innerHeight / 10;
-
+function getScreenMeasurements() {
 	let minX, minY, sizeX, sizeY;
 	if (Game.zoomIncludeFuture) {
 		minX = Game.futureMinX;
@@ -805,20 +803,43 @@ function resizeWindow() {
 		sizeY = Game.sizeY;
 	}
 
+	let width = (CARD_WIDTH + CARD_SPACING) * sizeX - CARD_SPACING + CANVAS_MARGIN * 2;
+	let height = (CARD_WIDTH + CARD_SPACING) * sizeY - CARD_SPACING + CANVAS_MARGIN * 2;
+	let scaleX = canvas.width / width;
+	let scaleY = canvas.height / height;
+	let scale = Math.min(scaleX, scaleY);
+
+	let panX = (canvas.width - width * scale) / 2 + CANVAS_MARGIN * scale;
+	let panY = (canvas.height - height * scale) / 2 + CANVAS_MARGIN * scale;
+	panX -= (CARD_WIDTH + CARD_SPACING) * minX * scale;
+	panY -= (CARD_WIDTH + CARD_SPACING) * minY * scale;
+
+	return {
+		'minX': minX,
+		'minY': minY,
+		'sizeX': sizeX,
+		'sizeY': sizeY,
+		'width': width,
+		'height': height,
+		'scaleX': scaleX,
+		'scaleY': scaleY,
+		'scale': scale,
+		'panX': panX,
+		'panY': panY,
+	}
+}
+
+function resizeWindow() {
+	BUTTON_RADIUS = window.innerHeight / 10;
+
 	canvas.width = canvas.parentElement.clientWidth;
 	canvas.height = canvas.parentElement.clientHeight - 20;
 
-	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * sizeX - CARD_SPACING + CANVAS_MARGIN * 2;
-	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * sizeY - CARD_SPACING + CANVAS_MARGIN * 2;
-	let requiredScaleX = canvas.width / requiredWidth;
-	let requiredScaleY = canvas.height / requiredHeight;
-	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
-	Game.scale = requiredScale;
+	let m = getScreenMeasurements();
 
-	Game.panX = (canvas.width - requiredWidth * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
-	Game.panY = (canvas.height - requiredHeight * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
-	Game.panX -= (CARD_WIDTH + CARD_SPACING) * minX * requiredScale;
-	Game.panY -= (CARD_WIDTH + CARD_SPACING) * minY * requiredScale;
+	Game.scale = m.scale;
+	Game.panX = m.panX;
+	Game.panY = m.panY;
 	window.requestAnimationFrame(draw);
 }
 
@@ -1274,42 +1295,19 @@ function getZoneCornersInCanvas(pos, margin = 0) {
 
 function panAndZoomToFit() {
 
-	let minX, minY, sizeX, sizeY;
-	if (Game.zoomIncludeFuture) {
-		minX = Game.futureMinX;
-		minY = Game.futureMinY;
-		sizeX = Game.futureSizeX;
-		sizeY = Game.futureSizeY;
-	} else {
-		minX = Game.minX;
-		minY = Game.minY;
-		sizeX = Game.sizeX;
-		sizeY = Game.sizeY;
-	}
+	let m = getScreenMeasurements();
 
-	// Pan and zoom so the entire grid fills the screen
-	let requiredWidth = (CARD_WIDTH + CARD_SPACING) * sizeX - CARD_SPACING + CANVAS_MARGIN * 2;
-	let requiredHeight = (CARD_WIDTH + CARD_SPACING) * sizeY - CARD_SPACING + CANVAS_MARGIN * 2;
-	let requiredScaleX = canvas.width / requiredWidth;
-	let requiredScaleY = canvas.height / requiredHeight;
-	let requiredScale = Math.min(requiredScaleX, requiredScaleY);
+	if (m.scale != Game.scale || m.panX != Game.panX || m.panY != Game.panY) {
+		Game.animSpeedScale = (m.scale - Game.scale) / PANNING_DURATION_MILLIS;
+		Game.animScale = Game.animStartScale = Game.scale - m.scale;
+		Game.scale = m.scale;
 
-	let requiredPanX = (canvas.width - requiredWidth * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
-	let requiredPanY = (canvas.height - requiredHeight * requiredScale) / 2 + CANVAS_MARGIN * requiredScale;
-	requiredPanX -= (CARD_WIDTH + CARD_SPACING) * minX * requiredScale;
-	requiredPanY -= (CARD_WIDTH + CARD_SPACING) * minY * requiredScale;
-
-	if (requiredScale != Game.scale || requiredPanX != Game.panX || requiredPanY != Game.panY) {
-		Game.animSpeedScale = (requiredScale - Game.scale) / PANNING_DURATION_MILLIS;
-		Game.animScale = Game.animStartScale = Game.scale - requiredScale;
-		Game.scale = requiredScale;
-
-		Game.animSpeedPanX = (requiredPanX - Game.panX) / PANNING_DURATION_MILLIS;
-		Game.animSpeedPanY = (requiredPanY - Game.panY) / PANNING_DURATION_MILLIS;
-		Game.animPanX = Game.animStartPanX = Game.panX - requiredPanX;
-		Game.animPanY = Game.animStartPanY = Game.panY - requiredPanY;
-		Game.panX = requiredPanX;
-		Game.panY = requiredPanY;
+		Game.animSpeedPanX = (m.panX - Game.panX) / PANNING_DURATION_MILLIS;
+		Game.animSpeedPanY = (m.panY - Game.panY) / PANNING_DURATION_MILLIS;
+		Game.animPanX = Game.animStartPanX = Game.panX - m.panX;
+		Game.animPanY = Game.animStartPanY = Game.panY - m.panY;
+		Game.panX = m.panX;
+		Game.panY = m.panY;
 		window.requestAnimationFrame(animatePanAndZoom);
 	}
 }
