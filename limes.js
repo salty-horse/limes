@@ -772,12 +772,21 @@ window.addEventListener('DOMContentLoaded', function() {
 		window.history.replaceState(null, '', url);
 	}
 
+	document.getElementById('menu_button').onclick = function() {
+		let menu = document.getElementById('menu');
+		menu.style.display = 'block';
+		document.getElementById('menu_cover').style.display = 'block';
+	}
+
+	document.getElementById('menu_cancel').onclick = hideMenu;
+
 	document.getElementById('new_game').onclick = function() {
 		if (Game.state != GameState.GAME_OVER) {
 			if (!window.confirm('Are you sure you wish to start a new game?')) {
 				return;
 			}
 		}
+		hideMenu();
 		Game.newGame();
 	}
 
@@ -786,6 +795,11 @@ window.addEventListener('DOMContentLoaded', function() {
 		Game.newGame(seed);
 	});
 });
+
+function hideMenu() {
+	document.getElementById('menu').style.display = 'none';
+	document.getElementById('menu_cover').style.display = 'none';
+}
 
 window.addEventListener('resize', resizeWindow);
 
