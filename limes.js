@@ -8,11 +8,11 @@ const ZONE_WIDTH = CARD_WIDTH / 2 - BORDER_WIDTH - INNER_BORDER_WIDTH / 2;
 const BORDER_COLOR = '#547062';
 const HUT_COLOR = '#5182ad';
 const HUT_WIDTH = Math.round(ZONE_WIDTH / 4);
-const BUTTON_RADIUS = CARD_WIDTH * 0.15;
-const CANVAS_OFFSET = BUTTON_RADIUS * 2 - 10;
+const CANVAS_MARGIN = 10;
 const PANNING_DURATION_MILLIS = 200;
 const ROTATION_DURATION_MILLIS = 150;
 const PATH_MARGIN = BORDER_WIDTH / 2;
+var BUTTON_RADIUS; // Set by resizeWindow
 
 
 class Point {
@@ -169,6 +169,8 @@ let hitCanvas, hitCtx;
 let newCardCanvas, newCardCtx;
 let hitRegions = {};
 
+let hammertime;
+
 let workerImage;
 let WORKER_WIDTH;
 let WORKER_HEIGHT;
@@ -264,74 +266,58 @@ let Game = {
 			}
 		}
 
-		let oldX = this.originX;
-		let oldY = this.originY;
+		let oldX = this.futureMinX;
+		let oldY = this.futureMinY;
 
 		// Calculate new grid origin
 		if (this.sizeX < 4) {
-			this.originX = this.minX - 1;
-			Game.drawSizeX = Game.sizeX + 2;
+			this.futureMinX = this.minX - 1;
+			Game.futureSizeX = Game.sizeX + 2;
 		} else {
-			this.originX = this.minX;
-			Game.drawSizeX = 4;
+			this.futureMinX = this.minX;
+			Game.futureSizeX = 4;
 		}
 
 		if (this.sizeY < 4) {
-			this.originY = this.minY - 1;
-			Game.drawSizeY = Game.sizeY + 2;
+			this.futureMinY = this.minY - 1;
+			Game.futureSizeY = Game.sizeY + 2;
 		} else {
-			this.originY = this.minY;
-			Game.drawSizeY = 4;
-		}
-
-		// If the grid origin changed, start panning
-
-		if (oldX != this.originX || oldY != this.originY) {
-			Game.panSpeedX = (oldX - this.originX) / PANNING_DURATION_MILLIS;
-			Game.panSpeedY = (oldY - this.originY) / PANNING_DURATION_MILLIS;
-
-			Game.panX = (this.originX - oldX);
-			Game.panY = (this.originY - oldY);
-			Game.panStartX = Game.panX;
-			Game.panStartY = Game.panY;
-
-			window.requestAnimationFrame(panCanvas);
-		} else {
-			// Resize the canvas to fit image
-			canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
-			canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
-			hitCanvas.width = canvas.width;
-			hitCanvas.height = canvas.height;
+			this.futureMinY = this.minY;
+			Game.futureSizeY = 4;
 		}
 	},
 
 	newGame: function(seed) {
 		this.state = GameState.PLACE_OR_MOVE_WORKER;
 
-		// This is the initial width and height. It will grow and shrink as needed.
-		canvas.width = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
-		canvas.height = (CARD_WIDTH + CARD_SPACING) * 3 + CANVAS_OFFSET * 2 + 10;
-		hitCanvas.width = canvas.width;
-		hitCanvas.height = canvas.height;
-
-		// card grid size and the minimal values - set by addCard()
-		this.sizeX = 0;
-		this.sizeY = 0;
+		// Card grid minimum and size values, not accounting for future placements
 		this.minX = 0;
 		this.minY = 0;
-		this.drawSizeX = 3;
-		this.drawSizeY = 3;
+		this.sizeX = 0;
+		this.sizeY = 0;
 
-		// Grid origin, accounting for future placements
-		this.originX = -1;
-		this.originY = -1;
+		// Card grid minimum and size values, accounting for future placements
+		this.futureMinX = -1;
+		this.futureMinY = -1;
+		this.futureSizeX = 3;
+		this.futureSizeY = 3;
 
-		// Panning animation
 		this.panX = 0;
 		this.panY = 0;
-		this.panStartX = 0;
-		this.panStartY = 0;
-		this.panStartTime = null;
+		this.scale = 1;
+		this.zoomIncludeFuture = true;
+		resizeWindow();
+
+		// Panning animation
+		this.animPanX = 0;
+		this.animPanY = 0;
+		this.animStartPanX = 0;
+		this.animStartPanY = 0;
+		this.animStartTime = null;
+
+		this.animScale = 0;
+		this.scaleStartX = 0;
+		this.scaleStartTime = null;
 
 		// Card rotation animation
 		this.rotateOffset = 0;
@@ -340,7 +326,7 @@ let Game = {
 
 		this.newCard = null;
 		this.newCardPosition = new Point(0, 0);
-		this.newCardRotation = 0;
+		this.newCardInfo = null;
 
 		this.workerSupply = 7;
 
@@ -401,16 +387,16 @@ let Game = {
 		// 	'4,3': [23, 0],
 		// 	'5,3': [24, 0],
 		// };
-		// this.originX = 0;
-		// this.originY = 0;
+		// this.futureMinX = 0;
+		// this.futureMinY = 0;
 		// this.sizeX = 6;
 		// this.sizeY = 4;
 		// this.minX = 0;
 		// this.minY = 0;
-		// this.drawSizeX = 6;
-		// this.drawSizeY = 4;
-		// canvas.width = (CARD_WIDTH + CARD_SPACING) * this.drawSizeX + CANVAS_OFFSET * 2 + 10;
-		// canvas.height = (CARD_WIDTH + CARD_SPACING) * this.drawSizeY + CANVAS_OFFSET * 2 + 10;
+		// this.futureSizeX = 6;
+		// this.futureSizeY = 4;
+		// canvas.width = (CARD_WIDTH + CARD_SPACING) * this.futureSizeX + CANVAS_MARGIN * 2 + 10;
+		// canvas.height = (CARD_WIDTH + CARD_SPACING) * this.futureSizeY + CANVAS_MARGIN * 2 + 10;
 		// for (let k in allCards) {
 		// 	Game.addCard(Point.fromImmutable(k), allCards[k]);
 		// }
@@ -450,8 +436,14 @@ let Game = {
 					this.score = this.tempScore;
 				}
 			}
-			instruction_label.textContent = 'Place the card:';
+			this.zoomIncludeFuture = true;
+			panAndZoomToFit();
+			instruction_label.textContent = 'Place the card';
 			clearHTMLButtons();
+
+		} else if (this.state == GameState.ROTATE_CARD) {
+			addHTMLButton('cancel', 'Undo');
+			addHTMLButton('confirm', 'Confirm');
 
 		} else if (this.state == GameState.PLACE_OR_MOVE_WORKER) {
 			let instruction_text;
@@ -515,6 +507,8 @@ let Game = {
 		if (this.state == GameState.GAME_OVER) {
 			instruction_label.textContent = 'Game over!';
 			this.score = this.tempScore;
+			this.zoomIncludeFuture = true;
+			panAndZoomToFit();
 			// TODO: Score summary
 
 
@@ -532,13 +526,7 @@ let Game = {
 			}
 		}
 
-		if (this.state == GameState.PLACE_CARD) {
-			newCardCanvas.hidden = false;
-		}
-
-		if (this.state != GameState.PLACE_CARD && this.state != GameState.ROTATE_CARD) {
-			newCardCanvas.hidden = true;
-		}
+		newCardCanvas.hidden = (this.state != GameState.PLACE_CARD);
 
 		document.getElementById('supply').textContent = this.workerSupply;
 	},
@@ -630,8 +618,98 @@ window.addEventListener('DOMContentLoaded', function() {
 	canvas = document.getElementById('canvas');
 	ctx = canvas.getContext('2d');
 
-	hitCanvas = document.createElement('canvas');
-	hitCtx = hitCanvas.getContext('2d');
+	// Handled in resizeWindow.
+	// TODO: Fix so the canvas doesn't resize when the page loads since newGame and resizeWindow is called on 'load'
+	// canvas.width = canvas.parentElement.clientWidth - 20;
+	// canvas.height = canvas.parentElement.clientHeight - 20;
+
+	hammertime = new Hammer(canvas);
+	hammertime.get('pan').set({ direction: Hammer.DIRECTION_ALL });
+	hammertime.get('pinch').set({ enable: true, direction: Hammer.DIRECTION_ALL });
+	
+	let dragStartPanX = null;
+	let dragStartPanY = null;
+	let pinchStartPanX = null;
+	let pinchStartPanY = null;
+	let pinchStartScale = null;
+
+	hammertime.on('pan', function(e) {
+		if (Game.animStartTime != null)
+			return;
+		if (dragStartPanX == null) {
+			dragStartPanX = Game.panX;
+			dragStartPanY = Game.panY;
+		}
+		document.body.style.cursor = 'grabbing';
+		Game.panX = dragStartPanX + e.deltaX;
+		Game.panY = dragStartPanY + e.deltaY;
+		Game.preventClick = true;
+		window.requestAnimationFrame(draw);
+	});
+	
+	hammertime.on('panend', function(e) {
+		document.body.style.cursor = 'default';
+		dragStartPanX = null;
+		dragStartPanY = null;
+		setTimeout(() => { Game.preventClick = false; }, 100);
+		window.requestAnimationFrame(draw);
+	});
+
+	hammertime.on('pinch', function(e) {
+		if (Game.animStartTime != null)
+			return;
+		if (pinchStartScale == null) {
+			pinchStartScale = Game.scale;
+			pinchStartPanX = Game.panX;
+			pinchStartPanY = Game.panY;
+		}
+
+		let scaleChange = e.scale - 1;
+
+		// TODO: Add max scale limit
+		if (pinchStartScale + scaleChange <= 0.1)
+			return;
+
+		Game.panX = pinchStartPanX - (e.center.x - pinchStartPanX) / pinchStartScale * scaleChange;
+		Game.panY = pinchStartPanY - (e.center.y - pinchStartPanY) / pinchStartScale * scaleChange;
+		Game.scale = pinchStartScale + scaleChange;
+		Game.preventClick = true;
+		window.requestAnimationFrame(draw);
+	});
+
+	hammertime.on('pinchend', function(e) {
+		pinchStartScale = null;
+		setTimeout(() => { Game.preventClick = false; }, 100);
+		window.requestAnimationFrame(draw);
+	});
+
+	canvas.addEventListener('wheel', function(e) {
+		if (Game.animStartTime != null)
+			return;
+
+		const rect = canvas.getBoundingClientRect();
+		const zoomPointX = e.clientX - rect.left;
+		const zoomPointY = e.clientY - rect.top;
+
+		let scaleChange;
+		if (e.deltaY < 0) {
+			// zoom in
+			scaleChange = 0.2;
+		} else {
+			// zoom out
+			scaleChange = -0.2;
+		}
+
+		// TODO: Add max scale limit
+		if (Game.scale + scaleChange <= 0.1) {
+			return;
+		}
+
+		Game.panX -= (zoomPointX - Game.panX) / Game.scale * scaleChange;
+		Game.panY -= (zoomPointY - Game.panY) / Game.scale * scaleChange;
+		Game.scale += scaleChange;
+		window.requestAnimationFrame(draw);
+	});
 
 	hitCanvas = document.createElement('canvas');
 	hitCtx = hitCanvas.getContext('2d');
@@ -694,43 +772,127 @@ window.addEventListener('DOMContentLoaded', function() {
 		window.history.replaceState(null, '', url);
 	}
 
+	document.getElementById('menu_button').onclick = function() {
+		let menu = document.getElementById('menu');
+		menu.style.display = 'block';
+		document.getElementById('menu_cover').style.display = 'block';
+	}
+
+	document.getElementById('menu_cancel').onclick = hideMenu;
+
 	document.getElementById('new_game').onclick = function() {
 		if (Game.state != GameState.GAME_OVER) {
 			if (!window.confirm('Are you sure you wish to start a new game?')) {
 				return;
 			}
 		}
+		hideMenu();
 		Game.newGame();
 	}
 
-	Game.newGame(seed);
+	// Wait on 'load' since we use seedrandom
+	window.addEventListener('load', function() {
+		Game.newGame(seed);
+	});
 });
+
+function hideMenu() {
+	document.getElementById('menu').style.display = 'none';
+	document.getElementById('menu_cover').style.display = 'none';
+}
+
+window.addEventListener('resize', resizeWindow);
+
+function getScreenMeasurements() {
+	let minX, minY, sizeX, sizeY;
+	if (Game.zoomIncludeFuture) {
+		minX = Game.futureMinX;
+		minY = Game.futureMinY;
+		sizeX = Game.futureSizeX;
+		sizeY = Game.futureSizeY;
+	} else {
+		minX = Game.minX;
+		minY = Game.minY;
+		sizeX = Game.sizeX;
+		sizeY = Game.sizeY;
+	}
+
+	// Don't zoom in more than a 3x3 grid
+	let scaleSizeX = Math.max(sizeX, 3);
+	let scaleSizeY = Math.max(sizeY, 3);
+
+	let scaleWidth = (CARD_WIDTH + CARD_SPACING) * scaleSizeX - CARD_SPACING + CANVAS_MARGIN * 2;
+	let scaleHeight = (CARD_WIDTH + CARD_SPACING) * scaleSizeY - CARD_SPACING + CANVAS_MARGIN * 2;
+	let width = (CARD_WIDTH + CARD_SPACING) * sizeX - CARD_SPACING + CANVAS_MARGIN * 2;
+	let height = (CARD_WIDTH + CARD_SPACING) * sizeY - CARD_SPACING + CANVAS_MARGIN * 2;
+	let scaleX = canvas.width / scaleWidth;
+	let scaleY = canvas.height / scaleHeight;
+	let scale = Math.min(scaleX, scaleY);
+
+	let panX = (canvas.width - width * scale) / 2 + CANVAS_MARGIN * scale;
+	let panY = (canvas.height - height * scale) / 2 + CANVAS_MARGIN * scale;
+	panX -= (CARD_WIDTH + CARD_SPACING) * minX * scale;
+	panY -= (CARD_WIDTH + CARD_SPACING) * minY * scale;
+
+	return {
+		'minX': minX,
+		'minY': minY,
+		'sizeX': sizeX,
+		'sizeY': sizeY,
+		'width': width,
+		'height': height,
+		'scaleX': scaleX,
+		'scaleY': scaleY,
+		'scale': scale,
+		'panX': panX,
+		'panY': panY,
+	}
+}
+
+function resizeWindow() {
+	BUTTON_RADIUS = window.innerHeight / 10;
+
+	canvas.width = canvas.parentElement.clientWidth;
+	canvas.height = canvas.parentElement.clientHeight - 20;
+
+	let m = getScreenMeasurements();
+
+	Game.scale = m.scale;
+	Game.panX = m.panX;
+	Game.panY = m.panY;
+	window.requestAnimationFrame(draw);
+}
 
 // Handles action caused by button presses (HTML buttons or canvas)
 function actionHandler(action) {
+	if (Game.preventClick)
+		return;
+
 	let mapChanged = true;
 	let scoreChanged = true;
 
 	if (Game.state == GameState.PLACE_CARD) {
 		Game.newCardPosition = Point.fromImmutable(action);
 		Game.state = GameState.ROTATE_CARD;
+		Game.newCardInfo = [Game.newCard, 0];
+		Game.addCard(Game.newCardPosition, Game.newCardInfo);
+		Game.zoomIncludeFuture = false;
+		panAndZoomToFit();
 
 	} else if (Game.state == GameState.ROTATE_CARD) {
 		if (action == 'confirm') {
 			Game.state = GameState.PLACE_OR_MOVE_WORKER;
-			Game.addCard(Game.newCardPosition, [Game.newCard, Game.newCardRotation]);
-			Game.newCardRotation = 0;
 			mapChanged = false;
 			scoreChanged = false;
 		} else if (action == 'cancel') {
 			Game.state = GameState.PLACE_CARD;
-			Game.newCardRotation = 0; // TODO: Keep rotation?
+			Game.removeCard(Game.newCardPosition);
 		} else if (action == 'rotate_left') {
-			Game.newCardRotation = (Game.newCardRotation + 3) % 4;
+			Game.newCardInfo[1] = (Game.newCardInfo[1] + 3) % 4;
 			Game.rotationDir = 1;
 			window.requestAnimationFrame(animateCardRotation);
 		} else if (action == 'rotate_right') {
-			Game.newCardRotation = (Game.newCardRotation + 1) % 4;
+			Game.newCardInfo[1] = (Game.newCardInfo[1] + 1) % 4;
 			Game.rotationDir = -1;
 			window.requestAnimationFrame(animateCardRotation);
 		}
@@ -744,7 +906,6 @@ function actionHandler(action) {
 		} else if (action == 'skip') {
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
-			Game.newCardRotation = 0;
 			mapChanged = false;
 			scoreChanged = false;
 		} else if (action == 'go_back') {
@@ -774,7 +935,6 @@ function actionHandler(action) {
 			Game.selectedTerritory = null;
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
-			Game.newCardRotation = 0;
 			scoreChanged = false;
 		} else {
 			// A territory was chosen
@@ -816,7 +976,6 @@ function actionHandler(action) {
 			Game.selectedWorker = null;
 			Game.state = GameState.PLACE_CARD;
 			Game.newCard = null;
-			Game.newCardRotation = 0;
 			scoreChanged = false;
 		} else {
 			// A territory was chosen
@@ -858,7 +1017,7 @@ function actionHandler(action) {
 	Game.updateScore();
 
 	// If there's any animation in progress, let it handle drawing
-	if (Game.panX != 0 || Game.panY != 0 || Game.rotateOffset)
+	if (Game.animPanX != 0 || Game.animPanY != 0 || Game.rotateOffset)
 		return;
 
 	draw();
@@ -909,10 +1068,6 @@ function parseMap() {
 
 	for (let [coord, [num, rotation]] of Game.cards) {
 		addCardToGrid(coord, num, rotation);
-	}
-
-	if (Game.state == GameState.ROTATE_CARD) {
-		addCardToGrid(Game.newCardPosition, Game.newCard, Game.newCardRotation);
 	}
 
 	// Collect zones into territories
@@ -1158,38 +1313,53 @@ function getZoneCornersInCanvas(pos, margin = 0) {
 	];
 }
 
-function panCanvas(timestamp) {
-	if (Game.panStartTime == null) {
-		Game.panStartTime = timestamp;
+function panAndZoomToFit() {
+
+	let m = getScreenMeasurements();
+
+	if (m.scale != Game.scale || m.panX != Game.panX || m.panY != Game.panY) {
+		Game.animSpeedScale = (m.scale - Game.scale) / PANNING_DURATION_MILLIS;
+		Game.animScale = Game.animStartScale = Game.scale - m.scale;
+		Game.scale = m.scale;
+
+		Game.animSpeedPanX = (m.panX - Game.panX) / PANNING_DURATION_MILLIS;
+		Game.animSpeedPanY = (m.panY - Game.panY) / PANNING_DURATION_MILLIS;
+		Game.animPanX = Game.animStartPanX = Game.panX - m.panX;
+		Game.animPanY = Game.animStartPanY = Game.panY - m.panY;
+		Game.panX = m.panX;
+		Game.panY = m.panY;
+		window.requestAnimationFrame(animatePanAndZoom);
+	}
+}
+
+function animatePanAndZoom(timestamp) {
+	if (Game.animStartTime == null) {
+		Game.animStartTime = timestamp;
 	}
 
-	let t = timestamp - Game.panStartTime;
+	let t = timestamp - Game.animStartTime;
 
-	Game.panX = Game.panStartX + Game.panSpeedX * t;
-	Game.panY = Game.panStartY + Game.panSpeedY * t;
+	Game.animScale = Game.animStartScale + Game.animSpeedScale * t;
+	Game.animPanX = Game.animStartPanX + Game.animSpeedPanX * t;
+	Game.animPanY = Game.animStartPanY + Game.animSpeedPanY * t;
 
-	if (Game.panSpeedX > 0 && Game.panX > 0 ||
-	    Game.panSpeedX < 0 && Game.panX < 0 ||
-	    Game.panSpeedY > 0 && Game.panY > 0 ||
-	    Game.panSpeedY < 0 && Game.panY < 0) {
-		Game.panX = 0;
-		Game.panY = 0;
-		Game.panStartX = 0;
-		Game.panStartY = 0;
-		Game.panStartTime = null;
-
-		// Resize the canvas to fit image
-		canvas.width = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeX + CANVAS_OFFSET * 2 + 10;
-		canvas.height = (CARD_WIDTH + CARD_SPACING) * Game.drawSizeY + CANVAS_OFFSET * 2 + 10;
-		hitCanvas.width = canvas.width;
-		hitCanvas.height = canvas.height;
-
+	if (Game.animSpeedScale > 0 && Game.animScale >= 0 ||
+	    Game.animSpeedScale < 0 && Game.animScale <= 0 ||
+	    Game.animSpeedPanX > 0 && Game.animPanX > 0 ||
+	    Game.animSpeedPanX < 0 && Game.animPanX < 0 ||
+	    Game.animSpeedPanY > 0 && Game.animPanY > 0 ||
+	    Game.animSpeedPanY < 0 && Game.animPanY < 0) {
+		
+		Game.animScale = 0;
+		Game.animPanX = 0;
+		Game.animPanY = 0;
+		Game.animStartTime = null;
 		draw();
 		return;
 	}
 
 	draw();
-	window.requestAnimationFrame(panCanvas);
+	window.requestAnimationFrame(animatePanAndZoom);
 }
 
 function animateCardRotation(timestamp) {
@@ -1219,35 +1389,29 @@ function animateCardRotation(timestamp) {
 }
 
 function draw() {
-
 	hitRegions = {};
 
 	ctx.clearRect(0, 0, canvas.width, canvas.height);
-	hitCtx.clearRect(0, 0, canvas.width, canvas.height);
+	hitCanvas.width = canvas.width;
+	hitCanvas.height = canvas.height;
 
 	ctx.save();
 	hitCtx.save();
 
-	ctx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
-	hitCtx.translate(CANVAS_OFFSET, CANVAS_OFFSET);
+	ctx.translate(Game.panX + Game.animPanX, Game.panY + Game.animPanY);
+	ctx.scale(Game.scale + Game.animScale, Game.scale + Game.animScale);
 
-	ctx.translate(
-		Math.floor((Game.panX - Game.originX) * (CARD_WIDTH + CARD_SPACING)),
-		Math.floor((Game.panY - Game.originY) * (CARD_WIDTH + CARD_SPACING))
-	);
+	// No need to take animation into account because input is disabled while animating
+	hitCtx.translate(Game.panX, Game.panY);
+	hitCtx.scale(Game.scale, Game.scale);
 
-	// No need to take panning into account because input is disabled while panning
-	hitCtx.translate(
-		-Game.originX * (CARD_WIDTH + CARD_SPACING),
-		-Game.originY * (CARD_WIDTH + CARD_SPACING)
-	);
+	// The canvas's 0,0 is now the top left corner of the first card (pos 0,0)
 
 	// Draw placement positions
-	if (Game.panX == 0 && Game.panY == 0 &&
-	    (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD)) {
+	if (Game.state == GameState.PLACE_CARD || Game.state == GameState.ROTATE_CARD) {
 		for (let coord of Game.nextPositions) {
 
-			if (coord.equals(Game.newCardPosition) && Game.state == GameState.ROTATE_CARD)
+			if ( Game.state == GameState.ROTATE_CARD && coord.equals(Game.newCardPosition))
 				continue;
 
 			if (Game.state == GameState.PLACE_CARD) {
@@ -1266,7 +1430,7 @@ function draw() {
 			);
 			ctx.lineJoin = 'miter';
 
-			if (Game.state == GameState.PLACE_CARD) {
+			if (Game.state == GameState.PLACE_CARD && Game.animStartTime == null) {
 				let hitRegionColor = getNewHitRegion(coord.toImmutable());
 				hitCtx.fillStyle = hitRegionColor;
 				hitCtx.lineWidth = BORDER_WIDTH / 4;
@@ -1285,6 +1449,10 @@ function draw() {
 	// Draw cards
 
 	for (let [coord, card_info] of Game.cards) {
+		// Skip newly-placed card, which we draw later
+		if (Game.state == GameState.ROTATE_CARD && coord.equals(Game.newCardPosition))
+			continue;
+
 		let x = coord.x * (CARD_WIDTH + CARD_SPACING);
 		let y = coord.y * (CARD_WIDTH + CARD_SPACING);
 		drawCard(
@@ -1292,7 +1460,9 @@ function draw() {
 			card_info[0],
 			card_info[1],
 			x,
-			y
+			y,
+			/* rotateOffset= */0,
+			/* highlight= */coord.equals(Game.newCardPosition)
 		);
 	}
 
@@ -1371,31 +1541,12 @@ function draw() {
 		drawCard(
 			ctx,
 			Game.newCard,
-			Game.newCardRotation,
+			Game.newCardInfo[1],
 			x,
 			y,
-			Game.rotateOffset
+			Game.rotateOffset,
+			/* highlight= */true
 		);
-
-		// Draw UI elements
-
-		if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
-			ctx.save();
-			hitCtx.save();
-
-			ctx.translate(x, y);
-			hitCtx.translate(x, y);
-
-			drawButton('confirm', CARD_WIDTH / 2, CARD_WIDTH + BUTTON_RADIUS - 3, '✓');
-			drawButton('cancel', CARD_WIDTH + 10, 0, '✗');
-
-			// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
-			drawButton('rotate_right', -10, CARD_WIDTH / 2 - BUTTON_RADIUS - 10, '↷');
-			drawButton('rotate_left', -10, CARD_WIDTH / 2 + BUTTON_RADIUS + 10, '↶');
-
-			hitCtx.restore();
-			ctx.restore();
-		}
 	}
 
 	// Draw territories
@@ -1421,9 +1572,17 @@ function draw() {
 
 	hitCtx.restore();
 	ctx.restore();
+
+	// Draw rotation buttons on the left edge of the canvas
+
+	if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
+		// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
+		drawButton('rotate_right', BUTTON_RADIUS + 10, canvas.height / 3, '↷');
+		drawButton('rotate_left', BUTTON_RADIUS + 10, canvas.height * 2 / 3, '↶');
+	}
 }
 
-function drawCard(ctx, num, rot, x, y, rotateOffset) {
+function drawCard(ctx, num, rot, x, y, rotateOffset, highlight) {
 
 	ctx.save();
 
@@ -1440,10 +1599,26 @@ function drawCard(ctx, num, rot, x, y, rotateOffset) {
 		ctx.rotate(Math.PI * 1.5);
 	}
 
-	if (rotateOffset != 0) {
+	if (rotateOffset !== undefined && rotateOffset != 0) {
 		ctx.translate(CARD_WIDTH / 2, CARD_WIDTH / 2);
 		ctx.rotate(Math.PI * rotateOffset);
 		ctx.translate(-CARD_WIDTH / 2, -CARD_WIDTH / 2);
+	}
+
+	// Draw highlight
+	if (highlight && Game.state == GameState.ROTATE_CARD) {
+		ctx.strokeStyle = 'orange';
+		ctx.lineWidth = 4;
+		ctx.lineJoin = 'round';
+		ctx.setLineDash([8, 4]);
+		ctx.strokeRect(
+			BORDER_WIDTH / 2 - 4,
+			BORDER_WIDTH / 2 - 4,
+			CARD_WIDTH - BORDER_WIDTH + 8,
+			CARD_WIDTH - BORDER_WIDTH + 8
+		);
+		ctx.lineJoin = 'miter';
+		ctx.setLineDash([]);
 	}
 
 	// Draw border
