@@ -343,13 +343,33 @@ let Game = {
 		this.selectedTerritory = null;
 		this.selectedWorker = null;
 
+		// Variants
+		this.variantDiagonals = document.getElementById('variant_diagonals').checked;
+		this.variantFerrymen = document.getElementById('variant_ferrymen').checked;
+
 		this.sharedLink = Boolean(seed);
 		if (!seed) {
 			seed = getRandomString();
 		}
 
+		let variantsCode = [];
+		let variantsDesc = [];
+		if (this.variantDiagonals) {
+			variantsCode.push('D');
+			variantsDesc.push('Diagonals');
+		}
+		if (this.variantFerrymen) {
+			variantsCode.push('F');
+			variantsDesc.push('Ferrymen');
+		}
+
+
 		this.cardDeck = Object.keys(CARDS);
 		this.cardRNG = new Math.seedrandom(seed);
+
+		if (variantsCode.length > 0) {
+			seed = seed + '_' + variantsCode.join('');
+		}
 
 		this.cards = new PointMap();
 		this.nextPositions = [];
@@ -357,6 +377,7 @@ let Game = {
 		this.targetTerritories = new Set();
 
 		document.getElementById('game_id').textContent = seed;
+		document.getElementById('variants').textContent = variantsDesc.join(', ');
 		document.getElementById('share_link').value =
 			[location.protocol, '//', location.host, location.pathname, '?' + seed].join('');
 
@@ -764,6 +785,18 @@ window.addEventListener('DOMContentLoaded', function() {
 	let seed = undefined;
 	if (location.search) {
 		seed = location.search.substring(1);
+
+		// Extract variants
+		let variantsSuffix;
+		[seed, variantsSuffix] = seed.split('_', 2);
+		if (variantsSuffix) {
+			if (variantsSuffix.indexOf('D') >= 0) {
+				document.getElementById('variant_diagonals').checked = true;
+			}
+			if (variantsSuffix.indexOf('F') >= 0) {
+				document.getElementById('variant_ferrymen').checked = true;
+			}
+		}
 	}
 
 	// Remove search query from URL
