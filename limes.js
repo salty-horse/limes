@@ -252,7 +252,7 @@ let Game = {
 	markNextCardPositions: function() {
 		this.nextPositions.length = 0;
 		for (let card of this.cards.keys()) {
-			for (let [neighbor, ] of getNeighbors(card)) {
+			for (let [neighbor, ] of getNeighbors(card, /* diagonals= */Game.variantDiagonals)) {
 				if (this.cards.has(neighbor))
 					continue;
 
@@ -517,8 +517,20 @@ let Game = {
 
 				// Mark adjacent territories as selectable
 				let territory = Game.territories[Game.zoneTerritories.get(Game.selectedWorker)];
-				for (let ter_id of territory.neighborTerritories) {
-					this.targetTerritories.add(ter_id);
+				for (let terId of territory.neighborTerritories) {
+					this.targetTerritories.add(terId);
+
+					if (this.variantFerrymen) {
+						let neighborTer = this.territories[terId];
+						// If this is a water territory and has a worker, it is considered a ferryman
+						if (neighborTer.type == 'W' && neighborTer.hasWorkers()) {
+							for (let terId2 of neighborTer.neighborTerritories) {
+								if (terId2 != territory.id) {
+									this.targetTerritories.add(terId2);
+								}
+							}
+						}
+					}
 				}
 
 				addHTMLButton('cancel', 'Undo worker movement');
@@ -1164,11 +1176,18 @@ function parseMap() {
 	}
 }
 
-function* getNeighbors(coords) {
+function* getNeighbors(coords, diagonals = false) {
 	yield [new Point(coords.x, coords.y - 1), 0];
 	yield [new Point(coords.x + 1, coords.y), 1];
 	yield [new Point(coords.x, coords.y + 1), 2];
 	yield [new Point(coords.x - 1, coords.y), 3];
+
+	if (diagonals) {
+		yield [new Point(coords.x + 1, coords.y - 1), 0];
+		yield [new Point(coords.x + 1, coords.y + 1), 0];
+		yield [new Point(coords.x - 1, coords.y + 1), 0];
+		yield [new Point(coords.x - 1, coords.y - 1), 0];
+	}
 }
 
 class Territory {
@@ -1182,6 +1201,15 @@ class Territory {
 		this.huts = 0;
 		this._path = null;
 		this._topLeftZone = null;
+	}
+
+	hasWorkers() {
+		for (let worker_pos of Game.workers) {
+			if (Game.zoneTerritories.get(worker_pos) == this.id) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	get topLeftZone() {
