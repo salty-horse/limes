@@ -346,6 +346,7 @@ let Game = {
 		// Variants
 		this.variantDiagonals = document.getElementById('variant_diagonals').checked;
 		this.variantFerrymen = document.getElementById('variant_ferrymen').checked;
+		this.variantProfis = document.getElementById('variant_profis').checked;
 
 		this.sharedLink = Boolean(seed);
 		if (!seed) {
@@ -361,6 +362,10 @@ let Game = {
 		if (this.variantFerrymen) {
 			variantsCode.push('F');
 			variantsDesc.push('Ferrymen');
+		}
+		if (this.variantProfis) {
+			variantsCode.push('P');
+			variantsDesc.push('Profis');
 		}
 
 
@@ -570,33 +575,86 @@ let Game = {
 		// Get worker count for each territory
 		let worker_counts = {};
 		for (let worker_pos of Game.workers) {
-			let s = worker_pos.toImmutable();
-			if (worker_counts[s]) {
-				worker_counts[s] += 1;
+			let terId = this.zoneTerritories.get(worker_pos);
+			if (worker_counts[terId]) {
+				worker_counts[terId] += 1;
 			} else {
-				worker_counts[s] = 1;
+				worker_counts[terId] = 1;
 			}
 		}
 
-		for (let pos_str in worker_counts) {
-			let pos = Point.fromImmutable(pos_str);
-			let zoneInfo = this.zoneGrid.get(pos);
+		// Score territories with workers, not the workers themselves
+		for (let terId in worker_counts) {
+			let territory = this.territories[terId];
 
 			// Field
-			if (zoneInfo[0] == 'Y') {
-				score += this.territories[this.zoneTerritories.get(pos)].zones.size;
+			if (territory.type == 'Y') {
+				score += territory.zones.size;
+
+				if (this.variantProfis) {
+					// Count worker in territory, and adjacent workers, including ferrymen adjacency
+					// TODO: Do territories with multiple workers count more than once?
+
+					// Count workers in own territory
+					if (worker_counts[terId]) {
+						score += worker_counts[terId];
+					}
+
+					for (let neighborTerId of territory.neighborTerritories) {
+						// Make sure it has workers
+						if (!worker_counts[neighborTerId])
+							continue;
+
+						score += worker_counts[neighborTerId];
+
+						let neighborTer = this.territories[neighborTerId];
+						if (neighborTer.type == 'W') {
+							for (let neighbor2TerId of neighborTer.neighborTerritories) {
+								if (neighbor2TerId == terId || !worker_counts[neighbor2TerId])
+									continue;
+
+								score += worker_counts[neighbor2TerId];
+							}
+						}
+					}
+				}
 
 			// Water
-			} else if (zoneInfo[0] == 'W') {
-				score += this.territories[this.zoneTerritories.get(pos)].huts;
+			} else if (territory.type == 'W') {
+				score += territory.huts;
+
+				if (this.variantProfis) {
+					// Count adjacent towers
+					for (let terId of territory.neighborTerritories) {
+						if (this.territories[terId].type == 'T') {
+							score++;
+						}
+					}
+				}
 
 			// Forest
-			} else if (zoneInfo[0] == 'F') {
-				score += this.territories[this.zoneTerritories.get(pos)].neighborTerritories.size;
+			} else if (territory.type == 'F') {
+				score += territory.neighborTerritories.size;
+
+				if (this.variantProfis) {
+					// Count huts in forest
+					for (let zonePos of territory.zones) {
+						let zoneInfo = this.zoneGrid.get(zonePos);
+						if (zoneInfo[1])
+							score++;
+						if (zoneInfo[2])
+							score++;
+						if (zoneInfo[3])
+							score++;
+						if (zoneInfo[4])
+							score++;
+					}
+				}
 
 			// Tower
-			} else if (zoneInfo[0] == 'T') {
+			} else if (territory.type == 'T') {
 				// Count forest zones in all four directions until the edge or a tower
+				let pos = territory.zones.values().next().value;
 				for (let dir = 0; dir < 4; dir++) {
 					let p = new Point(pos.x, pos.y);
 
@@ -614,8 +672,13 @@ let Game = {
 						if (zone == undefined || zone[0] == 'T')
 							break;
 
-						if (zone[0] == 'F')
+						if (zone[0] == 'F') {
 							score++;
+
+						// Count field zones
+						} else if (this.variantProfis && zone[0] == 'Y') {
+							score++;
+						}
 					}
 				}
 			}
@@ -807,6 +870,9 @@ window.addEventListener('DOMContentLoaded', function() {
 			}
 			if (variantsSuffix.indexOf('F') >= 0) {
 				document.getElementById('variant_ferrymen').checked = true;
+			}
+			if (variantsSuffix.indexOf('P') >= 0) {
+				document.getElementById('variant_profis').checked = true;
 			}
 		}
 	}
