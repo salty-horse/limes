@@ -330,15 +330,16 @@ let Game = {
 
 		this.workerSupply = 7;
 
+		// Zones the workers are on
+		this.workers = [];
+
 		this.score = 0;
 		this.tempScore = 0;
+		this.workerScores = null;
 
 		this.territories = null;
 		this.zoneGrid = null;
 		this.zoneTerritories = null;
-
-		// Zones the workers are on
-		this.workers = [];
 
 		this.selectedTerritory = null;
 		this.selectedWorker = null;
@@ -570,50 +571,66 @@ let Game = {
 	},
 
 	calcScore: function() {
+		this.workerScores = new PointMap();
 		let score = 0;
 
-		// Get worker count for each territory
-		let worker_counts = {};
-		for (let worker_pos of Game.workers) {
-			let terId = this.zoneTerritories.get(worker_pos);
-			if (worker_counts[terId]) {
-				worker_counts[terId] += 1;
+		// Get worker count for each position
+		let workerPosCounts = {};
+		for (let pos of Game.workers) {
+			let s = pos.toImmutable();
+			if (workerPosCounts[s]) {
+				workerPosCounts[s] += 1;
 			} else {
-				worker_counts[terId] = 1;
+				workerPosCounts[s] = 1;
 			}
 		}
 
-		// Score territories with workers, not the workers themselves
-		for (let terId in worker_counts) {
+		// Get worker count for each territory
+		let territoryWorkers = {};
+		for (let pos of Game.workers) {
+			let terId = this.zoneTerritories.get(pos);
+			if (territoryWorkers[terId]) {
+				territoryWorkers[terId] += 1;
+			} else {
+				territoryWorkers[terId] = 1;
+			}
+		}
+
+		// Score workers (only one per position)
+		for (let pos in workerPosCounts) {
+			pos = Point.fromImmutable(pos);
+			let terId = this.zoneTerritories.get(pos);
 			let territory = this.territories[terId];
+
+			let workerScore = 0;
 
 			// Field
 			if (territory.type == 'Y') {
-				score += territory.zones.size;
+				workerScore += territory.zones.size;
 
 				if (this.variantProfis) {
 					// Count worker in territory, and adjacent workers, including ferrymen adjacency
 					// TODO: Do territories with multiple workers count more than once?
 
 					// Count workers in own territory
-					if (worker_counts[terId]) {
-						score += worker_counts[terId];
+					if (territoryWorkers[terId]) {
+						workerScore += territoryWorkers[terId];
 					}
 
 					for (let neighborTerId of territory.neighborTerritories) {
 						// Make sure it has workers
-						if (!worker_counts[neighborTerId])
+						if (!territoryWorkers[neighborTerId])
 							continue;
 
-						score += worker_counts[neighborTerId];
+						workerScore += territoryWorkers[neighborTerId];
 
 						let neighborTer = this.territories[neighborTerId];
 						if (neighborTer.type == 'W') {
 							for (let neighbor2TerId of neighborTer.neighborTerritories) {
-								if (neighbor2TerId == terId || !worker_counts[neighbor2TerId])
+								if (neighbor2TerId == terId || !territoryWorkers[neighbor2TerId])
 									continue;
 
-								score += worker_counts[neighbor2TerId];
+								workerScore += territoryWorkers[neighbor2TerId];
 							}
 						}
 					}
@@ -621,40 +638,39 @@ let Game = {
 
 			// Water
 			} else if (territory.type == 'W') {
-				score += territory.huts;
+				workerScore += territory.huts;
 
 				if (this.variantProfis) {
 					// Count adjacent towers
 					for (let terId of territory.neighborTerritories) {
 						if (this.territories[terId].type == 'T') {
-							score++;
+							workerScore++;
 						}
 					}
 				}
 
 			// Forest
 			} else if (territory.type == 'F') {
-				score += territory.neighborTerritories.size;
+				workerScore += territory.neighborTerritories.size;
 
 				if (this.variantProfis) {
 					// Count huts in forest
 					for (let zonePos of territory.zones) {
 						let zoneInfo = this.zoneGrid.get(zonePos);
 						if (zoneInfo[1])
-							score++;
+							workerScore++;
 						if (zoneInfo[2])
-							score++;
+							workerScore++;
 						if (zoneInfo[3])
-							score++;
+							workerScore++;
 						if (zoneInfo[4])
-							score++;
+							workerScore++;
 					}
 				}
 
 			// Tower
 			} else if (territory.type == 'T') {
 				// Count forest zones in all four directions until the edge or a tower
-				let pos = territory.zones.values().next().value;
 				for (let dir = 0; dir < 4; dir++) {
 					let p = new Point(pos.x, pos.y);
 
@@ -673,15 +689,18 @@ let Game = {
 							break;
 
 						if (zone[0] == 'F') {
-							score++;
+							workerScore++;
 
 						// Count field zones
 						} else if (this.variantProfis && zone[0] == 'Y') {
-							score++;
+							workerScore++;
 						}
 					}
 				}
 			}
+
+			score += workerScore;
+			this.workerScores.set(pos, workerScore);
 		}
 
 		this.tempScore = score;
@@ -1655,6 +1674,25 @@ function draw() {
 			);
 		}
 
+		// Draw worker scores
+		if (Game.workerScores) {
+			let score = Game.workerScores.get(pos);
+			if (score != undefined) {
+				ctx.font = Math.floor(CARD_WIDTH * 0.1) + 'px serif';
+				ctx.textAlign = 'center';
+				ctx.fillStyle = 'black';
+				let center = Math.floor(ZONE_WIDTH / 2);
+				drawTextInBox(
+					ctx,
+					zoneOrigin[0] + center + WORKER_WIDTH / 2 - 10,
+					zoneOrigin[1] + center - WORKER_HEIGHT / 2 - 10,
+					Math.floor(CARD_WIDTH * 0.1),
+					score,
+					'black',
+					'yellow'
+				);
+			}
+		}
 	}
 	ctx.shadowBlur = 0;
 
@@ -1826,6 +1864,19 @@ function drawCircle(ctx, x, y, radius, color) {
 	ctx.beginPath();
 	ctx.arc(x, y, radius, 0, 2 * Math.PI);
 	ctx.fill();
+}
+
+function drawTextInBox(ctx, x, y, height, text, textColor, bgColor) {
+	ctx.save();
+	let width = ctx.measureText(text).width;
+	ctx.fillStyle = bgColor;
+	ctx.fillRect(x, y, width, height);
+	ctx.fillStyle = textColor;
+	ctx.font = (height - 1) + 'px serif';
+	ctx.textAlign = 'start';
+	ctx.textBaseline = 'top';
+	ctx.fillText(text, x, y + 1);
+	ctx.restore();
 }
 
 function drawZone(ctx, zone_info, quad) {
