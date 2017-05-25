@@ -550,6 +550,7 @@ let Game = {
 			panAndZoomToFit();
 			// TODO: Score summary
 
+			addHTMLButton('new_game', 'New Game');
 
 			// Analytics
 
@@ -1000,6 +1001,11 @@ function actionHandler(action) {
 
 	let mapChanged = true;
 	let scoreChanged = true;
+
+	if (action == 'new_game') {
+		Game.newGame();
+		return;
+	}
 
 	if (Game.state == GameState.PLACE_CARD) {
 		Game.newCardPosition = Point.fromImmutable(action);
