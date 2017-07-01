@@ -8,12 +8,14 @@ const ZONE_WIDTH = CARD_WIDTH / 2 - BORDER_WIDTH - INNER_BORDER_WIDTH / 2;
 const BORDER_COLOR = '#547062';
 const HUT_COLOR = '#5182ad';
 const HUT_WIDTH = Math.round(ZONE_WIDTH / 4);
-const CANVAS_MARGIN = 10;
 const PANNING_DURATION_MILLIS = 200;
 const ROTATION_DURATION_MILLIS = 150;
 const PATH_MARGIN = BORDER_WIDTH / 2;
-var BUTTON_RADIUS; // Set by resizeWindow
+const DESKTOP_BUTTON_RADIUS = CARD_WIDTH * 0.15;
+var MOBILE_BUTTON_RADIUS; // Set by resizeWindow
 
+const IS_MOBILE = (window.navigator.userAgent.indexOf('Mobi') >= 0);
+const CANVAS_MARGIN = IS_MOBILE ? 10 : (DESKTOP_BUTTON_RADIUS * 2 + 10);
 
 class Point {
 	constructor(x, y) {
@@ -981,7 +983,7 @@ function getScreenMeasurements() {
 }
 
 function resizeWindow() {
-	BUTTON_RADIUS = window.innerHeight / 10;
+	MOBILE_BUTTON_RADIUS = window.innerHeight / 10;
 
 	canvas.width = canvas.parentElement.clientWidth;
 	canvas.height = canvas.parentElement.clientHeight - 20;
@@ -1718,6 +1720,24 @@ function draw() {
 			Game.rotateOffset,
 			/* highlight= */true
 		);
+
+		// Draw rotation buttons next to the card
+		if (!IS_MOBILE && Game.rotateOffset == 0) {
+			ctx.save();
+			hitCtx.save();
+
+			ctx.translate(x, y);
+			hitCtx.translate(x, y);
+
+			drawButton('confirm', CARD_WIDTH / 2, CARD_WIDTH + DESKTOP_BUTTON_RADIUS - 3, DESKTOP_BUTTON_RADIUS, '✓');
+			drawButton('cancel', CARD_WIDTH + 10, 0, DESKTOP_BUTTON_RADIUS, '✗');
+			drawButton('rotate_right', -10, CARD_WIDTH / 2 - DESKTOP_BUTTON_RADIUS - 10, DESKTOP_BUTTON_RADIUS, '↷');
+			drawButton('rotate_left', -10, CARD_WIDTH / 2 + DESKTOP_BUTTON_RADIUS + 10, DESKTOP_BUTTON_RADIUS, '↶');
+
+			ctx.restore();
+			hitCtx.restore();
+		}
+
 	}
 
 	// Draw territories
@@ -1744,12 +1764,13 @@ function draw() {
 	hitCtx.restore();
 	ctx.restore();
 
-	// Draw rotation buttons on the left edge of the canvas
-
-	if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
-		// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
-		drawButton('rotate_right', BUTTON_RADIUS + 10, canvas.height / 3, '↷');
-		drawButton('rotate_left', BUTTON_RADIUS + 10, canvas.height * 2 / 3, '↶');
+	if (IS_MOBILE) {
+		// Draw rotation buttons on the left edge of the canvas
+		if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
+			// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
+			drawButton('rotate_right', MOBILE_BUTTON_RADIUS + 10, canvas.height / 3, MOBILE_BUTTON_RADIUS, '↷');
+			drawButton('rotate_left', MOBILE_BUTTON_RADIUS + 10, canvas.height * 2 / 3, MOBILE_BUTTON_RADIUS, '↶');
+		}
 	}
 }
 
@@ -1849,15 +1870,15 @@ function drawCard(ctx, num, rot, x, y, rotateOffset, highlight) {
 	ctx.restore();
 }
 
-function drawButton(name, x, y, text) {
-	drawCircle(ctx, x, y, BUTTON_RADIUS, 'rgba(0,0,0,0.4)');
-	drawCircle(ctx, x, y, BUTTON_RADIUS * 0.9, 'rgba(255,255,255,0.4)');
+function drawButton(name, x, y, radius, text) {
+	drawCircle(ctx, x, y, radius, 'rgba(0,0,0,0.4)');
+	drawCircle(ctx, x, y, radius * 0.9, 'rgba(255,255,255,0.4)');
 
 	let hitRegionColor = getNewHitRegion(name);
-	drawCircle(hitCtx, x, y, BUTTON_RADIUS, hitRegionColor);
+	drawCircle(hitCtx, x, y, radius, hitRegionColor);
 
 	if (text) {
-		ctx.font = BUTTON_RADIUS.toString() + 'px serif';
+		ctx.font = radius.toString() + 'px serif';
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'middle';
 		ctx.fillStyle = 'black';
@@ -1969,7 +1990,7 @@ function addHTMLButton(name, label) {
 // (if an array is shorter than 5 elems, assume false)
 //
 // Type is:
-// 'Y': field
+// 'Y': Field
 // 'W': Water
 // 'F': Forest
 // 'T': Tower
