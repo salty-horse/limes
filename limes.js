@@ -441,6 +441,9 @@ let Game = {
 		this.variantDiagonals = document.getElementById('variant_diagonals').checked;
 		this.variantFerrymen = document.getElementById('variant_ferrymen').checked;
 		this.variantProfis = document.getElementById('variant_profis').checked;
+		this.variantLighthouse = document.getElementById('variant_lighthouse').checked;
+
+		this.drawLighthouseNext = false;
 
 		this.sharedLink = Boolean(seed);
 		if (!seed) {
@@ -461,9 +464,13 @@ let Game = {
 			variantsCode.push('P');
 			variantsDesc.push('Profis');
 		}
+		if (this.variantLighthouse) {
+			variantsCode.push('L');
+			variantsDesc.push('Lighthouse');
+		}
 
 
-		this.cardDeck = Object.keys(CARDS);
+		this.cardDeck = Array.from({length: 24}, (v, i) => i+1);
 		this.cardRNG = new Math.seedrandom(seed);
 		this.cardSequence = [];
 
@@ -507,6 +514,7 @@ let Game = {
 		// 	'3,3': [22, 0],
 		// 	'4,3': [23, 0],
 		// 	'5,3': [24, 0],
+		// 	'6,0': ['L', 0],
 		// };
 		// this.futureMinX = 0;
 		// this.futureMinY = 0;
@@ -540,15 +548,25 @@ let Game = {
 
 		let instruction_label = document.getElementById('instruction');
 
+		let drawLighthouseNext = false;
+		if (this.variantLighthouse && this.cardSequence.length < 16 && this.cardSequence[this.cardSequence.length - 1] == 24) {
+			this.drawLighthouseNext = true;
+		}
+
 		if (this.state == GameState.PLACE_CARD) {
 			if (this.newCard == null) {
 				if (this.cards.size == 16) {
 					this.state = GameState.GAME_OVER;
 				} else {
 					// Draw new card from the deck
-					let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
-					this.newCard = this.cardDeck[ix];
-					this.cardDeck.splice(ix, 1);
+					if (this.drawLighthouseNext) {
+						this.newCard = 'L';
+						this.drawLighthouseNext = false;
+					} else {
+						let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
+						this.newCard = this.cardDeck[ix];
+						this.cardDeck.splice(ix, 1);
+					}
 					this.cardSequence.push(this.newCard);
 					this.markNextCardPositions();
 
@@ -590,14 +608,14 @@ let Game = {
 			if (this.cards.size != 1) {
 				addHTMLButton('go_back', 'Undo card placement');
 			}
-			addHTMLButton('skip', this.cards.size != 16 ? 'Draw next card' : 'End game');
+			addHTMLButton('skip', this.getDrawCardButtonText());
 
 		} else if (this.state == GameState.PLACE_WORKER) {
 			if (this.selectedTerritory) {
 				instruction_label = 'Undo or continue';
 
 				addHTMLButton('cancel', 'Undo worker placement');
-				addHTMLButton('confirm', this.cards.size != 16 ? 'Draw next card' : 'End game');
+				addHTMLButton('confirm', this.getDrawCardButtonText());
 			} else {
 				instruction_label.textContent = 'Select a territory to place the worker in';
 
@@ -613,7 +631,7 @@ let Game = {
 				instruction_label = 'Undo or continue';
 
 				addHTMLButton('cancel', 'Undo worker movement');
-				addHTMLButton('confirm', this.cards.size != 16 ? 'Draw next card' : 'End game');
+				addHTMLButton('confirm', this.getDrawCardButtonText());
 			} else {
 				instruction_label.textContent = 'Select a territory to move the worker to';
 
@@ -668,6 +686,14 @@ let Game = {
 		newCardCanvas.hidden = (this.state != GameState.PLACE_CARD);
 
 		document.getElementById('supply').textContent = this.workerSupply;
+	},
+
+	getDrawCardButtonText: function() {
+		if (this.drawLighthouseNext)
+			return 'Draw next card (lighthouse)';
+		if (this.cards.size != 16)
+			return 'Draw next card';
+		return 'End game';
 	},
 
 	calcScore: function() {
@@ -778,7 +804,7 @@ let Game = {
 							p.x--;
 
 						let zone = this.zoneGrid.get(p);
-						if (zone == undefined || zone[0] == 'T')
+						if (zone == undefined || zone[0] == 'T' || zone[0] == 'L')
 							break;
 
 						if (zone[0] == 'F') {
@@ -788,6 +814,15 @@ let Game = {
 						} else if (this.variantProfis && zone[0] == 'Y') {
 							workerScore++;
 						}
+					}
+				}
+
+			// Lighthouse
+			} else if (territory.type == 'L') {
+				for (let neighborTerId of territory.neighborTerritories) {
+					let neighborTer = this.territories[neighborTerId];
+					if (neighborTer.type == 'W') {
+						workerScore += neighborTer.zones.size;
 					}
 				}
 			}
@@ -1055,6 +1090,9 @@ window.addEventListener('DOMContentLoaded', function() {
 			}
 			if (variantsSuffix.indexOf('P') >= 0) {
 				document.getElementById('variant_profis').checked = true;
+			}
+			if (variantsSuffix.indexOf('L') >= 0) {
+				document.getElementById('variant_lighthouse').checked = true;
 			}
 		}
 	}
@@ -2116,9 +2154,14 @@ function drawCard(ctx, num, rot, x, y, rotateOffset, highlight) {
 	ctx.textAlign = 'center';
 	ctx.textBaseline = 'middle';
 	ctx.fillStyle = 'black';
-	let card_str = num.toString();
-	if (num == 6 || num == 9) {
-		card_str += '.';
+	let card_str;
+	if (num == 'L') {
+		card_str = '\u{1F525}';
+	} else {
+		card_str = num.toString();
+		if (num == 6 || num == 9) {
+			card_str += '.';
+		}
 	}
 	ctx.fillText(card_str, circle_x, circle_y);
 
@@ -2175,6 +2218,19 @@ function drawZone(ctx, zone_info, quad) {
 	ctx.fillStyle = ZONE_COLORS[zone_info[0]];
 	ctx.fillRect(zone_x, zone_y, ZONE_WIDTH, ZONE_WIDTH);
 
+	let x, y;
+	let center = Math.round(ZONE_WIDTH / 2);
+
+	// Draw lighthouse fire
+	if (zone_info[0] == 'L') {
+		ctx.save();
+		ctx.translate(zone_x, zone_y);
+		let radius = ZONE_WIDTH / 4;
+		drawCircle(ctx, center, center, radius, 'black');
+		drawCircle(ctx, center, center, radius * 0.9, '#c66017');
+		ctx.restore();
+	}
+
 	// Draw huts
 	if (zone_info.length == 1)
 		return;
@@ -2183,12 +2239,9 @@ function drawZone(ctx, zone_info, quad) {
 
 	ctx.translate(zone_x, zone_y);
 
-	let center = Math.round(ZONE_WIDTH / 2);
 	ctx.lineWidth = 1;
 	ctx.strokeStyle = 'black';
 	ctx.fillStyle = HUT_COLOR;
-
-	let x, y;
 
 	// North
 	if (zone_info[1]) {
@@ -2270,6 +2323,7 @@ let ZONE_COLORS = {
 	'W': '#094b99',
 	'F': '#79a029',
 	'T': '#989993',
+	'L': '#84857f',
 }
 
 let CARDS = {
@@ -2297,4 +2351,7 @@ let CARDS = {
 	22 : [['Y', 0, 1], ['W'], ['T', 0, 0, 0, 1], ['W']],
 	23 : [['W'], ['W'], ['F', 0, 1], ['F', 0, 0, 1]],
 	24 : [['Y', 1, 0, 0, 1], ['F'], ['Y'], ['F']],
+
+	// Lighthouse
+	'L' : [['W'], ['W'], ['L'], ['W']],
 }
