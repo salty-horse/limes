@@ -577,16 +577,7 @@ let Game = {
 		this.workerScores = new PointMap();
 		let score = 0;
 
-		// Get worker count for each position
-		let workerPosCounts = {};
-		for (let pos of Game.workers) {
-			let s = pos.toImmutable();
-			if (workerPosCounts[s]) {
-				workerPosCounts[s] += 1;
-			} else {
-				workerPosCounts[s] = 1;
-			}
-		}
+		let workerPosToScore = [];
 
 		// Get worker count for each territory
 		let territoryWorkers = {};
@@ -596,12 +587,12 @@ let Game = {
 				territoryWorkers[terId] += 1;
 			} else {
 				territoryWorkers[terId] = 1;
+				workerPosToScore.push(pos);
 			}
 		}
 
 		// Score workers (only one per position)
-		for (let pos in workerPosCounts) {
-			pos = Point.fromImmutable(pos);
+		for (let pos of workerPosToScore) {
 			let terId = this.zoneTerritories.get(pos);
 			let territory = this.territories[terId];
 
@@ -1622,7 +1613,7 @@ function draw() {
 
 	// Draw workers
 
-	// Get worker count for each territory
+	// Get worker count for each position
 	let worker_counts = {};
 	for (let worker_pos of Game.workers) {
 		let s = worker_pos.toImmutable();
