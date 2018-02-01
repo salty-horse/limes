@@ -23,6 +23,16 @@ class Point {
 		this.y = y;
 	}
 
+	compare(other) {
+		if (this.x == other.x && this.y == other.y)
+			return 0;
+
+		if (this.x < other.x || (this.x == other.x && this.y < other.y))
+			return -1;
+
+		return 1;
+	}
+
 	equals(other) {
 		if (!other) {
 			return false;
@@ -48,6 +58,55 @@ class Point {
 	static fromImmutable(s) {
 		let p = s.split(',', 2).map(x => Number.parseInt(x));
 		return new Point(p[0], p[1]);
+	}
+}
+
+class SortedPointArray {
+	constructor() {
+		this._array = [];
+		this.latestPoint = null;
+	}
+
+	get length() {
+		return this._array.length;
+	}
+
+	add(point) {
+		this.latestPoint = point;
+		if (this._array.length == 0) {
+			this._array.push(point);
+			return;
+		}
+
+		let ix = this._array.findIndex(other => point.compare(other) <= 0);
+		if (ix == -1)
+			this._array.push(point);
+		else
+			this._array.splice(ix, 0, point);
+	}
+
+	remove(point) {
+		let ix = this._array.findIndex(x => x.equals(point));
+		if (ix == -1)
+			return false;
+
+		this._array.splice(ix, 1);
+		return true;
+	}
+
+	removeLatest() {
+		if (this.latestPoint == null)
+			throw new Error('No latest point to remove');
+		this.remove(this.latestPoint);
+		this.latestPoint = null;
+	}
+
+	find(callback) {
+		this._array.find(callback);
+	}
+
+	[Symbol.iterator]() {
+		return this._array[Symbol.iterator]();
 	}
 }
 
@@ -333,7 +392,7 @@ let Game = {
 		this.workerSupply = 7;
 
 		// Zones the workers are on
-		this.workers = [];
+		this.workers = new SortedPointArray();
 
 		this.score = 0;
 		this.tempScore = 0;
@@ -1053,7 +1112,7 @@ function actionHandler(action) {
 			if (Game.selectedTerritory) {
 				Game.selectedTerritory = null;
 				Game.workerSupply++;
-				Game.workers.pop();
+				Game.workers.removeLatest();
 			} else {
 				scoreChanged = false;
 			}
@@ -1074,12 +1133,12 @@ function actionHandler(action) {
 			// Place the worker in the territory
 			if (existingWorkerZone) {
 				// Reuse an existing worker position
-				Game.workers.push(existingWorkerZone);
+				Game.workers.add(existingWorkerZone);
 			} else {
 				// Pick the first zone of the current card
 				for (let pos of getCardZones(Game.newCardPosition)) {
 					if (Game.selectedTerritory.zones.has(pos)) {
-						Game.workers.push(pos);
+						Game.workers.add(pos);
 						break;
 					}
 				}
@@ -1091,8 +1150,8 @@ function actionHandler(action) {
 		if (action == 'cancel') {
 			if (Game.selectedTerritory) {
 				Game.selectedTerritory = null;
-				Game.workers.pop();
-				Game.workers.push(Game.selectedWorker);
+				Game.workers.removeLatest();
+				Game.workers.add(Game.selectedWorker);
 			} else {
 				scoreChanged = false;
 			}
@@ -1111,23 +1170,17 @@ function actionHandler(action) {
 			Game.selectedTerritory = Game.territories[action];
 
 			// Remove worker from array
-			let ix = 0;
-			for (; ix < Game.workers.length; ix++) {
-				if (Game.workers[ix].equals(Game.selectedWorker)) {
-					Game.workers.splice(ix, 1);
-					break;
-				}
-			}
+			Game.workers.remove(Game.selectedWorker);
 
 			let existingWorkerZone = findWorkerInTerritory(Game.selectedTerritory);
 
 			// Place the worker in the territory
 			if (existingWorkerZone) {
 				// Reuse an existing worker position
-				Game.workers.push(existingWorkerZone);
+				Game.workers.add(existingWorkerZone);
 			} else {
 				// Pick the top-left zone
-				Game.workers.push(Game.selectedTerritory.topLeftZone);
+				Game.workers.add(Game.selectedTerritory.topLeftZone);
 			}
 			Game.targetTerritories.clear();
 		}
@@ -1161,12 +1214,11 @@ function* getCardZones(card_pos) {
 }
 
 function findWorkerInTerritory(territory) {
-	for (let worker_pos of Game.workers) {
-		if (territory.zones.has(worker_pos)) {
-			return worker_pos;
-		}
-	}
-	return null;
+	let result = Game.workers.find(pos => territory.zones.has(pos));
+	if (result == undefined)
+		return null;
+	else
+		return result;
 }
 
 function parseMap() {
@@ -1288,12 +1340,11 @@ class Territory {
 	}
 
 	hasWorkers() {
-		for (let worker_pos of Game.workers) {
-			if (Game.zoneTerritories.get(worker_pos) == this.id) {
-				return true;
-			}
-		}
-		return false;
+		let result = Game.workers.find(pos => Game.zoneTerritories.get(pos) == this.id);
+		if (result == undefined)
+			return false;
+		else
+			return true;
 	}
 
 	get topLeftZone() {
