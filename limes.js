@@ -669,7 +669,7 @@ let Game = {
 
 				if (this.variantProfis) {
 					// Count worker in territory, and adjacent workers, including ferrymen adjacency
-					// TODO: Do territories with multiple workers count more than once?
+					// If a territory has more than one worker, they are all considered in the scoring.
 
 					// Count workers in own territory
 					if (territoryWorkers[terId]) {
@@ -683,13 +683,15 @@ let Game = {
 
 						workerScore += territoryWorkers[neighborTerId];
 
-						let neighborTer = this.territories[neighborTerId];
-						if (neighborTer.type == 'W') {
-							for (let neighbor2TerId of neighborTer.neighborTerritories) {
-								if (neighbor2TerId == terId || !territoryWorkers[neighbor2TerId])
-									continue;
+						if (this.variantFerrymen) {
+							let neighborTer = this.territories[neighborTerId];
+							if (neighborTer.type == 'W') {
+								for (let neighbor2TerId of neighborTer.neighborTerritories) {
+									if (neighbor2TerId == terId || !territoryWorkers[neighbor2TerId])
+										continue;
 
-								workerScore += territoryWorkers[neighbor2TerId];
+									workerScore += territoryWorkers[neighbor2TerId];
+								}
 							}
 						}
 					}
