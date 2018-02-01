@@ -433,6 +433,7 @@ let Game = {
 
 		this.cardDeck = Object.keys(CARDS);
 		this.cardRNG = new Math.seedrandom(seed);
+		this.cardSequence = [];
 
 		if (variantsCode.length > 0) {
 			seed = seed + '_' + variantsCode.join('');
@@ -489,8 +490,9 @@ let Game = {
 		// 	Game.addCard(Point.fromImmutable(k), allCards[k]);
 		// }
 
-		// Draw new card
+		// Draw first card
 		let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
+		this.cardSequence.push(String(ix + 1));
 		this.addCard(new Point(0, 0), [this.cardDeck[ix], 0]);
 		this.cardDeck.splice(ix, 1);
 		this.updateUI();
@@ -515,6 +517,7 @@ let Game = {
 					let ix = Math.floor(this.cardRNG() * this.cardDeck.length);
 					this.newCard = this.cardDeck[ix];
 					this.cardDeck.splice(ix, 1);
+					this.cardSequence.push(this.newCard);
 					this.markNextCardPositions();
 
 					// Draw card onto mini-canvas
@@ -610,6 +613,9 @@ let Game = {
 			this.zoomIncludeFuture = true;
 			panAndZoomToFit();
 			// TODO: Score summary
+
+			document.getElementById('card_sequence').textContent = this.cardSequence.join(', ');
+			document.getElementById('endgame_summary').style.display = 'list-item';
 
 			addHTMLButton('new_game', 'New Game');
 
@@ -964,13 +970,7 @@ window.addEventListener('DOMContentLoaded', function() {
 	document.getElementById('menu_cancel').onclick = hideMenu;
 
 	document.getElementById('new_game').onclick = function() {
-		if (Game.state != GameState.GAME_OVER) {
-			if (!window.confirm('Are you sure you wish to start a new game?')) {
-				return;
-			}
-		}
-		hideMenu();
-		Game.newGame();
+		actionHandler('new_game');
 	}
 
 	// Wait on 'load' since we use seedrandom
@@ -1055,6 +1055,13 @@ function actionHandler(action) {
 	let scoreChanged = true;
 
 	if (action == 'new_game') {
+		if (Game.state != GameState.GAME_OVER) {
+			if (!window.confirm('Are you sure you wish to start a new game?')) {
+				return;
+			}
+		}
+		hideMenu();
+		document.getElementById('endgame_summary').style.display = 'none';
 		Game.newGame();
 		return;
 	}
