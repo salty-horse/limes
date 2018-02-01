@@ -23,6 +23,7 @@ const IS_MOBILE = (window.navigator.userAgent.indexOf('Mobi') >= 0);
 const CANVAS_MARGIN = IS_MOBILE ? 10 : (DESKTOP_BUTTON_RADIUS * 2 + 10);
 
 var CANVAS_VISIBLE = false;
+let CANVAS_PIXEL_RATIO = 1; // Set on DOMContentLoaded
 
 class Point {
 	constructor(x, y) {
@@ -842,10 +843,14 @@ window.addEventListener('DOMContentLoaded', function() {
 		});
 	}
 
-	// Handled in resizeWindow.
-	// TODO: Fix so the canvas doesn't resize when the page loads since newGame and resizeWindow is called on 'load'
-	// canvas.width = canvas.parentElement.clientWidth - 20;
-	// canvas.height = canvas.parentElement.clientHeight - 20;
+	const devicePixelRatio = window.devicePixelRatio || 1;
+	const backingStoreRatio =
+		ctx.webkitBackingStorePixelRatio ||
+		ctx.mozBackingStorePixelRatio ||
+		ctx.msBackingStorePixelRatio ||
+		ctx.oBackingStorePixelRatio ||
+		ctx.backingStorePixelRatio || 1;
+	CANVAS_PIXEL_RATIO = devicePixelRatio / backingStoreRatio;
 
 	hammertime = new Hammer(canvas);
 	hammertime.get('pan').set({ direction: Hammer.DIRECTION_ALL });
@@ -865,8 +870,8 @@ window.addEventListener('DOMContentLoaded', function() {
 			dragStartPanY = Game.panY;
 		}
 		document.body.style.cursor = 'grabbing';
-		Game.panX = dragStartPanX + e.deltaX;
-		Game.panY = dragStartPanY + e.deltaY;
+		Game.panX = dragStartPanX + e.deltaX * CANVAS_PIXEL_RATIO;
+		Game.panY = dragStartPanY + e.deltaY * CANVAS_PIXEL_RATIO;
 		Game.preventClick = true;
 		window.requestAnimationFrame(draw);
 	});
@@ -888,7 +893,7 @@ window.addEventListener('DOMContentLoaded', function() {
 			prevPinchScale = 1;
 		}
 
-		let scaleDiff = (e.scale - prevPinchScale);
+		let scaleDiff = (e.scale - prevPinchScale) * CANVAS_PIXEL_RATIO;
 		prevPinchScale = e.scale;
 
 		// Limit scale
@@ -899,14 +904,14 @@ window.addEventListener('DOMContentLoaded', function() {
 			scaleDiff = MAX_SCALE - Game.scale;
 
 		if (prevCenterX != e.center.x)
-			Game.panX += (e.center.x - prevCenterX) * (1 - scaleDiff);
+			Game.panX += (e.center.x - prevCenterX) * CANVAS_PIXEL_RATIO * (1 - scaleDiff);
 		prevCenterX = e.center.x;
 		if (prevCenterY != e.center.y)
-			Game.panY += (e.center.y - prevCenterY) * (1 - scaleDiff);
+			Game.panY += (e.center.y - prevCenterY) * CANVAS_PIXEL_RATIO * (1 - scaleDiff);
 		prevCenterY = e.center.y;
 
-		Game.panX -= (e.center.x - Game.panX) / Game.scale * scaleDiff;
-		Game.panY -= (e.center.y - Game.panY) / Game.scale * scaleDiff;
+		Game.panX -= (e.center.x * CANVAS_PIXEL_RATIO - Game.panX) / Game.scale * scaleDiff;
+		Game.panY -= (e.center.y * CANVAS_PIXEL_RATIO - Game.panY) / Game.scale * scaleDiff;
 
 		Game.scale += scaleDiff;
 
@@ -939,6 +944,8 @@ window.addEventListener('DOMContentLoaded', function() {
 			scaleChange = -0.2;
 		}
 
+		scaleChange *= CANVAS_PIXEL_RATIO;
+
 		let newScale = Game.scale + scaleChange;
 		if (newScale < MIN_SCALE)
 			return;
@@ -949,8 +956,8 @@ window.addEventListener('DOMContentLoaded', function() {
 			return;
 		}
 
-		Game.panX -= (zoomPointX - Game.panX) / Game.scale * scaleChange;
-		Game.panY -= (zoomPointY - Game.panY) / Game.scale * scaleChange;
+		Game.panX -= (zoomPointX * CANVAS_PIXEL_RATIO - Game.panX) / Game.scale * scaleChange;
+		Game.panY -= (zoomPointY * CANVAS_PIXEL_RATIO - Game.panY) / Game.scale * scaleChange;
 		Game.scale += scaleChange;
 		window.requestAnimationFrame(draw);
 	});
@@ -989,8 +996,8 @@ window.addEventListener('DOMContentLoaded', function() {
 
 	canvas.addEventListener('click', function(e) {
 		const rect = canvas.getBoundingClientRect();
-		const x = e.clientX - rect.left;
-		const y = e.clientY - rect.top;
+		const x = (e.clientX - rect.left) * CANVAS_PIXEL_RATIO;
+		const y = (e.clientY - rect.top) * CANVAS_PIXEL_RATIO;
 
 		const pixel = hitCtx.getImageData(x, y, 1, 1).data;
 		const color = `rgb(${pixel[0]},${pixel[1]},${pixel[2]})`;
@@ -1120,6 +1127,17 @@ function resizeWindow() {
 
 	canvas.width = canvas.parentElement.clientWidth;
 	canvas.height = canvas.parentElement.clientHeight - 20;
+
+	if (CANVAS_PIXEL_RATIO != 1) {
+		let oldWidth = canvas.width;
+		let oldHeight = canvas.height;
+
+		canvas.width = oldWidth * CANVAS_PIXEL_RATIO;
+		canvas.height = oldHeight * CANVAS_PIXEL_RATIO;
+
+		canvas.style.width = oldWidth + 'px';
+		canvas.style.height = oldHeight + 'px';
+	}
 
 	let m = getScreenMeasurements();
 
@@ -1980,8 +1998,8 @@ function draw() {
 		// Draw rotation buttons on the left edge of the canvas
 		if (Game.state == GameState.ROTATE_CARD && Game.rotateOffset == 0) {
 			// (These arrow shapes are better, but are not supported in iOS: ⟳ ⟲)
-			drawButton('rotate_right', MOBILE_BUTTON_RADIUS + 10, canvas.height / 3, MOBILE_BUTTON_RADIUS, '↷');
-			drawButton('rotate_left', MOBILE_BUTTON_RADIUS + 10, canvas.height * 2 / 3, MOBILE_BUTTON_RADIUS, '↶');
+			drawButton('rotate_right', MOBILE_BUTTON_RADIUS + 10, window.innerHeight / 3, MOBILE_BUTTON_RADIUS, '↷');
+			drawButton('rotate_left', MOBILE_BUTTON_RADIUS + 10, window.innerHeight * 2 / 3, MOBILE_BUTTON_RADIUS, '↶');
 		}
 	}
 }
@@ -2083,6 +2101,11 @@ function drawCard(ctx, num, rot, x, y, rotateOffset, highlight) {
 }
 
 function drawButton(name, x, y, radius, text) {
+	ctx.save();
+	hitCtx.save();
+	ctx.scale(CANVAS_PIXEL_RATIO, CANVAS_PIXEL_RATIO);
+	hitCtx.scale(CANVAS_PIXEL_RATIO, CANVAS_PIXEL_RATIO);
+
 	drawCircle(ctx, x, y, radius, 'rgba(0,0,0,0.4)');
 	drawCircle(ctx, x, y, radius * 0.9, 'rgba(255,255,255,0.4)');
 
@@ -2096,6 +2119,9 @@ function drawButton(name, x, y, radius, text) {
 		ctx.fillStyle = 'black';
 		ctx.fillText(text, x, y);
 	}
+
+	hitCtx.restore();
+	ctx.restore();
 }
 
 function drawCircle(ctx, x, y, radius, color) {
