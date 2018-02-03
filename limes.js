@@ -367,7 +367,6 @@ let Game = {
 		this.panY = 0;
 		this.scale = 1;
 		this.zoomIncludeFuture = true;
-		resizeWindow();
 
 		// Panning animation
 		this.animPanX = 0;
@@ -499,7 +498,7 @@ let Game = {
 		this.updateScore();
 
 		parseMap();
-		draw();
+		resizeWindow();
 	},
 
 	// Updates HTML
@@ -1035,6 +1034,10 @@ function getScreenMeasurements() {
 }
 
 function resizeWindow() {
+	// Check if a game is active
+	if (Game.cards == undefined)
+		return;
+
 	MOBILE_BUTTON_RADIUS = window.innerHeight / 10;
 
 	canvas.width = canvas.parentElement.clientWidth;
