@@ -862,6 +862,8 @@ window.addEventListener('DOMContentLoaded', function() {
 		window.requestAnimationFrame(draw);
 	});
 
+	hammertime.on('doubletap', panAndZoomToFit);
+
 	canvas.addEventListener('wheel', function(e) {
 		if (Game.animStartTime != null)
 			return;
