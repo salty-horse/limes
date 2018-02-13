@@ -102,7 +102,7 @@ class SortedPointArray {
 	}
 
 	find(callback) {
-		this._array.find(callback);
+		return this._array.find(callback);
 	}
 
 	[Symbol.iterator]() {
