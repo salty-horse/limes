@@ -17,6 +17,8 @@ var MOBILE_BUTTON_RADIUS; // Set by resizeWindow
 const IS_MOBILE = (window.navigator.userAgent.indexOf('Mobi') >= 0);
 const CANVAS_MARGIN = IS_MOBILE ? 10 : (DESKTOP_BUTTON_RADIUS * 2 + 10);
 
+var CANVAS_VISIBLE = false;
+
 class Point {
 	constructor(x, y) {
 		this.x = x;
@@ -791,7 +793,9 @@ let Game = {
 
 window.addEventListener('DOMContentLoaded', function() {
 	canvas = document.getElementById('canvas');
-	ctx = canvas.getContext('2d');
+	canvas.style.visibility = 'hidden';
+	canvas.mozOpaque = true;
+	ctx = canvas.getContext('2d', {alpha: false});
 
 	// Handled in resizeWindow.
 	// TODO: Fix so the canvas doesn't resize when the page loads since newGame and resizeWindow is called on 'load'
@@ -887,12 +891,16 @@ window.addEventListener('DOMContentLoaded', function() {
 	});
 
 	hitCanvas = document.createElement('canvas');
-	hitCtx = hitCanvas.getContext('2d');
+	hitCanvas.mozOpaque = true;
+	hitCtx = hitCanvas.getContext('2d', {alpha: false});
 
 	newCardCanvas = document.getElementById('new_card');
+	newCardCanvas.mozOpaque = true;
 	newCardCanvas.width = CARD_WIDTH;
 	newCardCanvas.height = CARD_WIDTH;
-	newCardCtx = newCardCanvas.getContext('2d');
+	newCardCtx = newCardCanvas.getContext('2d', {alpha: false});
+	newCardCtx.fillStyle = 'white';
+	newCardCtx.fillRect(0, 0, newCardCanvas.width, newCardCanvas.height);
 
 	workerImage = document.getElementById('worker_image');
 
@@ -1037,6 +1045,11 @@ function resizeWindow() {
 	// Check if a game is active
 	if (Game.cards == undefined)
 		return;
+
+	if (CANVAS_VISIBLE) {
+		CANVAS_VISIBLE = false;
+		canvas.style.visibility = 'hidden';
+	}
 
 	MOBILE_BUTTON_RADIUS = window.innerHeight / 10;
 
@@ -1599,7 +1612,15 @@ function animateCardRotation(timestamp) {
 function draw() {
 	hitRegions = {};
 
-	ctx.clearRect(0, 0, canvas.width, canvas.height);
+	ctx.fillStyle = 'white';
+	ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+	if (!CANVAS_VISIBLE) {
+		CANVAS_VISIBLE = true;
+		canvas.style.visibility = 'visible';
+	}
+
+	// This has the side-effect of clearing the canvas
 	hitCanvas.width = canvas.width;
 	hitCanvas.height = canvas.height;
 
