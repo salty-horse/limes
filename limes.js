@@ -13,7 +13,11 @@ const PANNING_DURATION_MILLIS = 200;
 const ROTATION_DURATION_MILLIS = 150;
 const PATH_MARGIN = BORDER_WIDTH / 2;
 const DESKTOP_BUTTON_RADIUS = CARD_WIDTH * 0.15;
-var MOBILE_BUTTON_RADIUS; // Set by resizeWindow
+
+// Set by resizeWindow
+var MOBILE_BUTTON_RADIUS;
+var MIN_SCALE = null;
+var MAX_SCALE = null;
 
 const IS_MOBILE = (window.navigator.userAgent.indexOf('Mobi') >= 0);
 const CANVAS_MARGIN = IS_MOBILE ? 10 : (DESKTOP_BUTTON_RADIUS * 2 + 10);
@@ -849,9 +853,9 @@ window.addEventListener('DOMContentLoaded', function() {
 	
 	let dragStartPanX = null;
 	let dragStartPanY = null;
-	let pinchStartPanX = null;
-	let pinchStartPanY = null;
-	let pinchStartScale = null;
+	let prevCenterX = null;
+	let prevCenterY = null;
+	let prevPinchScale = null;
 
 	hammertime.on('pan', function(e) {
 		if (Game.animStartTime != null)
@@ -878,27 +882,40 @@ window.addEventListener('DOMContentLoaded', function() {
 	hammertime.on('pinch', function(e) {
 		if (Game.animStartTime != null)
 			return;
-		if (pinchStartScale == null) {
-			pinchStartScale = Game.scale;
-			pinchStartPanX = Game.panX;
-			pinchStartPanY = Game.panY;
+		if (prevPinchScale == null) {
+			prevCenterX = e.center.x;
+			prevCenterY = e.center.y;
+			prevPinchScale = 1;
 		}
 
-		let scaleChange = e.scale - 1;
+		let scaleDiff = (e.scale - prevPinchScale);
+		prevPinchScale = e.scale;
 
-		// TODO: Add max scale limit
-		if (pinchStartScale + scaleChange <= 0.1)
-			return;
+		// Limit scale
+		let newScale = Game.scale + scaleDiff;
+		if (newScale < MIN_SCALE)
+			scaleDiff = MIN_SCALE - Game.scale;
+		if (newScale > MAX_SCALE)
+			scaleDiff = MAX_SCALE - Game.scale;
 
-		Game.panX = pinchStartPanX - (e.center.x - pinchStartPanX) / pinchStartScale * scaleChange;
-		Game.panY = pinchStartPanY - (e.center.y - pinchStartPanY) / pinchStartScale * scaleChange;
-		Game.scale = pinchStartScale + scaleChange;
+		if (prevCenterX != e.center.x)
+			Game.panX += (e.center.x - prevCenterX) * (1 - scaleDiff);
+		prevCenterX = e.center.x;
+		if (prevCenterY != e.center.y)
+			Game.panY += (e.center.y - prevCenterY) * (1 - scaleDiff);
+		prevCenterY = e.center.y;
+
+		Game.panX -= (e.center.x - Game.panX) / Game.scale * scaleDiff;
+		Game.panY -= (e.center.y - Game.panY) / Game.scale * scaleDiff;
+
+		Game.scale += scaleDiff;
+
 		Game.preventClick = true;
 		window.requestAnimationFrame(draw);
 	});
 
 	hammertime.on('pinchend', function(e) {
-		pinchStartScale = null;
+		prevPinchScale = null;
 		setTimeout(() => { Game.preventClick = false; }, 100);
 		window.requestAnimationFrame(draw);
 	});
@@ -922,7 +939,12 @@ window.addEventListener('DOMContentLoaded', function() {
 			scaleChange = -0.2;
 		}
 
-		// TODO: Add max scale limit
+		let newScale = Game.scale + scaleChange;
+		if (newScale < MIN_SCALE)
+			return;
+		if (newScale > MAX_SCALE)
+			return;
+
 		if (Game.scale + scaleChange <= 0.1) {
 			return;
 		}
@@ -1100,6 +1122,12 @@ function resizeWindow() {
 	canvas.height = canvas.parentElement.clientHeight - 20;
 
 	let m = getScreenMeasurements();
+
+
+	let scaleWidth = (CARD_WIDTH + CARD_SPACING) * 6 - CARD_SPACING + CANVAS_MARGIN * 2;
+	MIN_SCALE = Math.min(canvas.width / scaleWidth, canvas.height / scaleWidth);
+	scaleWidth = (CARD_WIDTH + CARD_SPACING) * 2 - CARD_SPACING + CANVAS_MARGIN * 2;
+	MAX_SCALE = Math.min(canvas.width / scaleWidth, canvas.height / scaleWidth);
 
 	Game.scale = m.scale;
 	Game.panX = m.panX;
