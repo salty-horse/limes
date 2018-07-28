@@ -821,6 +821,23 @@ window.addEventListener('DOMContentLoaded', function() {
 	canvas.mozOpaque = true;
 	ctx = canvas.getContext('2d', {alpha: false});
 
+	if (DEBUG_MODE) {
+		let link = document.createElement('a');
+		link.appendChild(document.createTextNode('Replace canvas'));
+		document.getElementById('info').insertBefore(link, document.getElementById('info').firstChild);
+
+		let flip = true;
+		link.addEventListener('click', e => {
+			if (flip) {
+				canvas.replaceWith(hitCanvas);
+			} else {
+				hitCanvas.replaceWith(canvas);
+			}
+			flip = !flip;
+			return false;
+		});
+	}
+
 	// Handled in resizeWindow.
 	// TODO: Fix so the canvas doesn't resize when the page loads since newGame and resizeWindow is called on 'load'
 	// canvas.width = canvas.parentElement.clientWidth - 20;
