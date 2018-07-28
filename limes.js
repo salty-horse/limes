@@ -1,5 +1,6 @@
 'use strict';
 
+const DEBUG_MODE = false;
 const CARD_WIDTH = 180;
 const CARD_SPACING = 2;
 const BORDER_WIDTH = 8;
@@ -1863,6 +1864,20 @@ function draw() {
 			hitCtx.fillStyle = hitRegionColor;
 			hitCtx.lineWidth = 4;
 			hitCtx.fill(territory.path);
+		}
+	}
+
+	if (DEBUG_MODE) {
+		// Draw zone coordinates
+		ctx.font = Math.floor(CARD_WIDTH * 0.1).toString() + 'px serif';
+		ctx.textAlign = 'left';
+		ctx.textBaseline = 'top';
+		ctx.fillStyle = 'black';
+		for (let ter of Game.territories) {
+			for (let zone of ter.zones) {
+				let startCorners = getZoneCornersInCanvas(zone, PATH_MARGIN);
+				ctx.fillText(`${zone}`, startCorners[0].x, startCorners[0].y);
+			}
 		}
 	}
 
