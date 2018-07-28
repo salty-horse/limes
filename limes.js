@@ -49,6 +49,11 @@ class Point {
 		return '(' + this.x + ', ' + this.y + ')';
 	}
 
+	* [Symbol.iterator]() {
+		yield this.x;
+		yield this.y;
+	}
+
 	inspect() {
 		return this.toString();
 	}
@@ -60,6 +65,24 @@ class Point {
 	static fromImmutable(s) {
 		let p = s.split(',', 2).map(x => Number.parseInt(x));
 		return new Point(p[0], p[1]);
+	}
+
+	advance_in_direction(direction) {
+		// Up
+		if (direction == 0) {
+			return new Point(this.x, this.y - 1);
+		// Right
+		} else if (direction == 1) {
+			return new Point(this.x + 1, this.y);
+		// Down
+		} else if (direction == 2) {
+			return new Point(this.x, this.y + 1);
+		// Left
+		} else if (direction == 3) {
+			return new Point(this.x - 1, this.y);
+		} else {
+			return null;
+		}
 	}
 }
 
@@ -1408,97 +1431,102 @@ class Territory {
 			let zoneCorners = getZoneCornersInCanvas(this.zones.values().next().value, PATH_MARGIN);
 			let p = new Path2D();
 			this._path = p;
-			p.moveTo(zoneCorners[0][0], zoneCorners[0][1]);
-			p.lineTo(zoneCorners[1][0], zoneCorners[1][1]);
-			p.lineTo(zoneCorners[2][0], zoneCorners[2][1]);
-			p.lineTo(zoneCorners[3][0], zoneCorners[3][1]);
+			p.moveTo(...zoneCorners[0]);
+			p.lineTo(...zoneCorners[1]);
+			p.lineTo(...zoneCorners[2]);
+			p.lineTo(...zoneCorners[3]);
 			p.closePath();
 
 			return p;
 		}
 
 		let start_coord = this.topLeftZone;
+		let direction = 1; // Facing right
 
 		let startCorners = getZoneCornersInCanvas(start_coord, PATH_MARGIN);
 
-		// The left side of the zone forms the initial path
+		// The path starts from the top left of the start zone
 		let p = new Path2D();
 		this._path = p;
-		p.moveTo(startCorners[3][0], startCorners[3][1]);
-		p.lineTo(startCorners[0][0], startCorners[0][1]);
+		p.moveTo(...startCorners[3]);
 
-		let direction = 1;
-		let curr_coord = start_coord;
-		let curr_coord_in_territory = true;
+		let startCorner = startCorners[3];
 
-		// Start by moving left
-		let next_coord = new Point(start_coord.x + 1, start_coord.y);
+		let next_coord = start_coord;
+		let curr_coord = null;
 
-		do {
+		while (true) {
+			curr_coord = next_coord;
+
+			// Add BACK LEFT corner to path
+			let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
+			if (startCorner.equals(corners[(direction + 3) % 4]))
+				break;
+			p.lineTo(...corners[(direction + 3) % 4]);
+
+			// Try moving in these directions in order:
+			// Left
+			// Forward
+			// Right
+			// Back
+
+			// Left
+			next_coord = curr_coord.advance_in_direction((direction + 3) % 4);
 			if (this.zones.has(next_coord)) {
-				if (!curr_coord_in_territory) {
-					// Going from outside in.
-
-					// Look to the right of the new zone. If it's inside the territory, mark its BACK LEFT corner
-					let left_zone;
-					if (direction == 0) {
-						left_zone = new Point(next_coord.x + 1, next_coord.y);
-					} else if (direction == 1) {
-						left_zone = new Point(next_coord.x, next_coord.y + 1);
-					} else if (direction == 2) {
-						left_zone = new Point(next_coord.x - 1, next_coord.y);
-					} else if (direction == 3) {
-						left_zone = new Point(next_coord.x, next_coord.y - 1);
-					}
-					if (this.zones.has(left_zone)) {
-						let corners = getZoneCornersInCanvas(left_zone, PATH_MARGIN);
-						let corner = corners[(direction + 3) % 4];
-						p.lineTo(corner[0], corner[1]);
-					}
-
-					// Add the BACK RIGHT corner of the new zone to the path.
-					let corners = getZoneCornersInCanvas(next_coord, PATH_MARGIN);
-					let corner = corners[(direction + 2) % 4];
-					p.lineTo(corner[0], corner[1]);
-				} else {
-					// Staying inside.
-					// Add the FRONT LEFT corner of the old zone to the path
-					let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
-					let corner = corners[direction];
-					p.lineTo(corner[0], corner[1]);
-				}
-
-				curr_coord_in_territory = true;
-
-				// Turn left
+				// Turn left and advance to new zone
 				direction = (direction + 3) % 4;
-			} else {
-				if (curr_coord_in_territory) {
-					// Going from inside out.
-					// Add the FRONT LEFT corner of the current zone to the path
-					let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
-					let corner = corners[direction];
-					p.lineTo(corner[0], corner[1]);
-				}
+				continue;
+			}
 
-				curr_coord_in_territory = false;
+			// Forward
+			next_coord = curr_coord.advance_in_direction(direction);
+			if (this.zones.has(next_coord)) {
+				// Add the FRONT LEFT corner of the current zone to the path
+				let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
+				let corner = corners[direction];
+				if (startCorner.equals(corner))
+					break;
+				p.lineTo(...corner);
+				continue;
+			}
+
+			// Right
+			next_coord = curr_coord.advance_in_direction((direction + 1) % 4);
+			if (this.zones.has(next_coord)) {
+				// Add FRONT LEFT and FRONT RIGHT corner of the current zone to path
+				let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
+				if (startCorner.equals(corners[(direction + 0) % 4]))
+					break;
+				p.lineTo(...corners[(direction + 0) % 4]);
+				if (startCorner.equals(corners[(direction + 1) % 4]))
+					break;
+				p.lineTo(...corners[(direction + 1) % 4]);
 
 				// Turn right
 				direction = (direction + 1) % 4;
+				continue;
 			}
 
-			// Move to the next coordinate
-			curr_coord = next_coord;
-			if (direction == 0) {
-				next_coord = new Point(curr_coord.x, curr_coord.y - 1);
-			} else if (direction == 1) {
-				next_coord = new Point(curr_coord.x + 1, curr_coord.y);
-			} else if (direction == 2) {
-				next_coord = new Point(curr_coord.x, curr_coord.y + 1);
-			} else if (direction == 3) {
-				next_coord = new Point(curr_coord.x - 1, curr_coord.y);
+			// Backward
+			next_coord = curr_coord.advance_in_direction((direction + 2) % 4);
+			if (this.zones.has(next_coord)) {
+				// Add FRONT LEFT, FRONT RIGHT, and BACK RIGHT corners of the current zone to path
+				let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
+				if (startCorner.equals(corners[(direction + 0) % 4]))
+					break;
+				p.lineTo(...corners[(direction + 0) % 4]);
+				if (startCorner.equals(corners[(direction + 1) % 4]))
+					break;
+				p.lineTo(...corners[(direction + 1) % 4]);
+				if (startCorner.equals(corners[(direction + 2) % 4]))
+					break;
+				p.lineTo(...corners[(direction + 2) % 4]);
+
+				// Turn back
+				direction = (direction + 2) % 4;
+				continue;
 			}
-		} while (!start_coord.equals(curr_coord));
+		}
 
 		p.closePath();
 
@@ -1529,10 +1557,10 @@ function getZoneCornersInCanvas(pos, margin = 0) {
 
 	let zoneOrigin = ZONE_ORIGINS[zoneQuad];
 	return [
-		[canvasCardX + zoneOrigin[0] + margin, canvasCardY + zoneOrigin[1] + margin],
-		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH - margin, canvasCardY + zoneOrigin[1] + margin],
-		[canvasCardX + zoneOrigin[0] + ZONE_WIDTH - margin, canvasCardY + zoneOrigin[1] + ZONE_WIDTH - margin],
-		[canvasCardX + zoneOrigin[0] + margin, canvasCardY + zoneOrigin[1] + ZONE_WIDTH - margin],
+		new Point(canvasCardX + zoneOrigin[0] + margin, canvasCardY + zoneOrigin[1] + margin),
+		new Point(canvasCardX + zoneOrigin[0] + ZONE_WIDTH - margin, canvasCardY + zoneOrigin[1] + margin),
+		new Point(canvasCardX + zoneOrigin[0] + ZONE_WIDTH - margin, canvasCardY + zoneOrigin[1] + ZONE_WIDTH - margin),
+		new Point(canvasCardX + zoneOrigin[0] + margin, canvasCardY + zoneOrigin[1] + ZONE_WIDTH - margin),
 	];
 }
 
@@ -1715,8 +1743,8 @@ function draw() {
 		let pos = Point.fromImmutable(pos_str);
 		let zoneOrigin = getZoneCornersInCanvas(pos)[0];
 		ctx.drawImage(workerImage,
-			zoneOrigin[0] + WORKER_X,
-			zoneOrigin[1] + WORKER_Y,
+			zoneOrigin.x + WORKER_X,
+			zoneOrigin.y + WORKER_Y,
 			WORKER_WIDTH,
 			WORKER_HEIGHT
 		);
@@ -1730,8 +1758,8 @@ function draw() {
 			let center = Math.floor(ZONE_WIDTH / 2);
 			ctx.fillText(
 				count,
-				zoneOrigin[0] + center,
-				zoneOrigin[1] + center);
+				zoneOrigin.x + center,
+				zoneOrigin.y + center);
 		}
 
 		// Draw worker outlines
@@ -1741,8 +1769,8 @@ function draw() {
 			ctx.lineJoin = 'round';
 			ctx.setLineDash([8, 4]);
 			ctx.strokeRect(
-				zoneOrigin[0] + WORKER_OUTLINE_ORIGIN - 4,
-				zoneOrigin[1] + WORKER_OUTLINE_ORIGIN - 4,
+				zoneOrigin.x + WORKER_OUTLINE_ORIGIN - 4,
+				zoneOrigin.y + WORKER_OUTLINE_ORIGIN - 4,
 				WORKER_OUTLINE_SIDE + 8,
 				WORKER_OUTLINE_SIDE + 8
 			);
@@ -1752,8 +1780,8 @@ function draw() {
 			hitCtx.fillStyle = hitRegionColor;
 			hitCtx.lineWidth = 4;
 			hitCtx.fillRect(
-				zoneOrigin[0] + WORKER_OUTLINE_ORIGIN - 4,
-				zoneOrigin[1] + WORKER_OUTLINE_ORIGIN - 4,
+				zoneOrigin.x + WORKER_OUTLINE_ORIGIN - 4,
+				zoneOrigin.y + WORKER_OUTLINE_ORIGIN - 4,
 				WORKER_OUTLINE_SIDE + 8,
 				WORKER_OUTLINE_SIDE + 8
 			);
@@ -1769,8 +1797,8 @@ function draw() {
 				let center = Math.floor(ZONE_WIDTH / 2);
 				drawTextInBox(
 					ctx,
-					zoneOrigin[0] + center + WORKER_WIDTH / 2 - 10,
-					zoneOrigin[1] + center - WORKER_HEIGHT / 2 - 10,
+					zoneOrigin.x + center + WORKER_WIDTH / 2 - 10,
+					zoneOrigin.y + center - WORKER_HEIGHT / 2 - 10,
 					Math.floor(CARD_WIDTH * 0.1),
 					score,
 					'black',
