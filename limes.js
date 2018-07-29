@@ -1458,29 +1458,93 @@ class Territory {
 			return p;
 		}
 
-		let start_coord = this.topLeftZone;
-		let direction = 1; // Facing right
+		// This will keep track of all visited points in all paths
+		let visitedPoints = new PointSet();
 
-		let startCorners = getZoneCornersInCanvas(start_coord, PATH_MARGIN);
+		let innerPaths = [];
 
-		// The path starts from the top left of the start zone
+		// Calculate outer path
+		let outerPathPoints = this._getPathPoints(this.topLeftZone, visitedPoints);
+		for (let pt of outerPathPoints) {
+			visitedPoints.add(pt);
+		}
+
+		if (this.zones.size >= 8) {
+			// The territory may have holes, so look for any inner paths
+			for (let zone of this.zones) {
+				// Only consider zones that border another territory on their left side
+				if (this.zones.has(new Point(zone.x - 1, zone.y)))
+					continue;
+				let innerPathPoints = this._getPathPoints(zone, visitedPoints);
+
+				// This path was already visited
+				if (!innerPathPoints)
+					continue;
+
+				for (let pt of innerPathPoints) {
+					visitedPoints.add(pt);
+				}
+
+				innerPaths.push(innerPathPoints);
+			}
+		}
+
+		// Create path from outer path and inner paths
 		let p = new Path2D();
 		this._path = p;
-		p.moveTo(...startCorners[3]);
+		p.moveTo(...outerPathPoints[0]);
+		let it = outerPathPoints[Symbol.iterator]();
+		it.next();
+		for (let pt of it) {
+			p.lineTo(...pt);
+		}
+		p.closePath();
 
-		let startCorner = startCorners[3];
+		for (let innerPath of innerPaths) {
+			p.moveTo(...innerPath[0]);
+			let it = innerPath[Symbol.iterator]();
+			it.next();
+			for (let pt of it) {
+				p.lineTo(...pt);
+			}
+			p.closePath();
+		}
 
-		let next_coord = start_coord;
+		return p;
+	}
+
+	_getPathPoints(startZone, visitedPoints) {
+		let pathPoints = [];
+		let direction = 0; // Start facing up
+
+		let startCorners = getZoneCornersInCanvas(startZone, PATH_MARGIN);
+
+		let next_coord = startZone;
 		let curr_coord = null;
 
+		let cornerOffsets = [];
+		let newDirection = direction;
+
+pathLoop:
 		while (true) {
+			// Add each collected corner, until a stopping point is reached
+			if (cornerOffsets.length) {
+				let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
+				for (let offset of cornerOffsets) {
+					let pt = corners[(direction + offset) % 4];
+					if (visitedPoints.has(pt))
+						return;
+					if (pathPoints.length && pathPoints[0].equals(pt))
+						break pathLoop;
+					pathPoints.push(pt);
+				}
+			}
+
+			direction = newDirection;
 			curr_coord = next_coord;
 
 			// Add BACK LEFT corner to path
-			let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
-			if (startCorner.equals(corners[(direction + 3) % 4]))
-				break;
-			p.lineTo(...corners[(direction + 3) % 4]);
+			cornerOffsets = [3];
 
 			// Try moving in these directions in order:
 			// Left
@@ -1491,8 +1555,8 @@ class Territory {
 			// Left
 			next_coord = curr_coord.advance_in_direction((direction + 3) % 4);
 			if (this.zones.has(next_coord)) {
-				// Turn left and advance to new zone
-				direction = (direction + 3) % 4;
+				// Turn left
+				newDirection = (direction + 3) % 4;
 				continue;
 			}
 
@@ -1500,11 +1564,8 @@ class Territory {
 			next_coord = curr_coord.advance_in_direction(direction);
 			if (this.zones.has(next_coord)) {
 				// Add the FRONT LEFT corner of the current zone to the path
-				let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
-				let corner = corners[direction];
-				if (startCorner.equals(corner))
-					break;
-				p.lineTo(...corner);
+				cornerOffsets.push(0);
+				newDirection = direction;
 				continue;
 			}
 
@@ -1512,16 +1573,11 @@ class Territory {
 			next_coord = curr_coord.advance_in_direction((direction + 1) % 4);
 			if (this.zones.has(next_coord)) {
 				// Add FRONT LEFT and FRONT RIGHT corner of the current zone to path
-				let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
-				if (startCorner.equals(corners[(direction + 0) % 4]))
-					break;
-				p.lineTo(...corners[(direction + 0) % 4]);
-				if (startCorner.equals(corners[(direction + 1) % 4]))
-					break;
-				p.lineTo(...corners[(direction + 1) % 4]);
+				cornerOffsets.push(0);
+				cornerOffsets.push(1);
 
 				// Turn right
-				direction = (direction + 1) % 4;
+				newDirection = (direction + 1) % 4;
 				continue;
 			}
 
@@ -1529,26 +1585,17 @@ class Territory {
 			next_coord = curr_coord.advance_in_direction((direction + 2) % 4);
 			if (this.zones.has(next_coord)) {
 				// Add FRONT LEFT, FRONT RIGHT, and BACK RIGHT corners of the current zone to path
-				let corners = getZoneCornersInCanvas(curr_coord, PATH_MARGIN);
-				if (startCorner.equals(corners[(direction + 0) % 4]))
-					break;
-				p.lineTo(...corners[(direction + 0) % 4]);
-				if (startCorner.equals(corners[(direction + 1) % 4]))
-					break;
-				p.lineTo(...corners[(direction + 1) % 4]);
-				if (startCorner.equals(corners[(direction + 2) % 4]))
-					break;
-				p.lineTo(...corners[(direction + 2) % 4]);
+				cornerOffsets.push(0);
+				cornerOffsets.push(1);
+				cornerOffsets.push(2);
 
 				// Turn back
-				direction = (direction + 2) % 4;
+				newDirection = (direction + 2) % 4;
 				continue;
 			}
 		}
 
-		p.closePath();
-
-		return p;
+		return pathPoints;
 	}
 }
 
@@ -1880,7 +1927,7 @@ function draw() {
 			let hitRegionColor = getNewHitRegion(terId.toString());
 			hitCtx.fillStyle = hitRegionColor;
 			hitCtx.lineWidth = 4;
-			hitCtx.fill(territory.path);
+			hitCtx.fill(territory.path, "evenodd");
 		}
 	}
 
