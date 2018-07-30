@@ -19,6 +19,8 @@ var MOBILE_BUTTON_RADIUS;
 var MIN_SCALE = null;
 var MAX_SCALE = null;
 
+var drawInProgress = false;
+
 const IS_MOBILE = (window.navigator.userAgent.indexOf('Mobi') >= 0);
 const CANVAS_MARGIN = IS_MOBILE ? 10 : (DESKTOP_BUTTON_RADIUS * 2 + 10);
 
@@ -873,7 +875,10 @@ window.addEventListener('DOMContentLoaded', function() {
 		Game.panX = dragStartPanX + e.deltaX * CANVAS_PIXEL_RATIO;
 		Game.panY = dragStartPanY + e.deltaY * CANVAS_PIXEL_RATIO;
 		Game.preventClick = true;
-		window.requestAnimationFrame(draw);
+		if (!drawInProgress) {
+			drawInProgress = true;
+			window.requestAnimationFrame(draw);
+		}
 	});
 	
 	hammertime.on('panend', function(e) {
@@ -881,7 +886,10 @@ window.addEventListener('DOMContentLoaded', function() {
 		dragStartPanX = null;
 		dragStartPanY = null;
 		setTimeout(() => { Game.preventClick = false; }, 100);
-		window.requestAnimationFrame(draw);
+		if (!drawInProgress) {
+			drawInProgress = true;
+			window.requestAnimationFrame(draw);
+		}
 	});
 
 	hammertime.on('pinch', function(e) {
@@ -916,13 +924,19 @@ window.addEventListener('DOMContentLoaded', function() {
 		Game.scale += scaleDiff;
 
 		Game.preventClick = true;
-		window.requestAnimationFrame(draw);
+		if (!drawInProgress) {
+			drawInProgress = true;
+			window.requestAnimationFrame(draw);
+		}
 	});
 
 	hammertime.on('pinchend', function(e) {
 		prevPinchScale = null;
 		setTimeout(() => { Game.preventClick = false; }, 100);
-		window.requestAnimationFrame(draw);
+		if (!drawInProgress) {
+			drawInProgress = true;
+			window.requestAnimationFrame(draw);
+		}
 	});
 
 	hammertime.on('doubletap', panAndZoomToFit);
@@ -2002,6 +2016,8 @@ function draw() {
 			drawButton('rotate_left', MOBILE_BUTTON_RADIUS + 10, window.innerHeight * 2 / 3, MOBILE_BUTTON_RADIUS, '↶');
 		}
 	}
+
+	drawInProgress = false;
 }
 
 function drawCard(ctx, num, rot, x, y, rotateOffset, highlight) {
