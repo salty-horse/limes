@@ -863,8 +863,14 @@ window.addEventListener('DOMContentLoaded', function() {
 	let prevCenterX = null;
 	let prevCenterY = null;
 	let prevPinchScale = null;
+	let lastPinchTime = 0;
 
 	hammertime.on('pan', function(e) {
+		// Hack to bypass hammer.js bug where an incorrect pan event is called at the end of a pinch
+		// See https://github.com/hammerjs/hammer.js/issues/871
+		if (Date.now() - lastPinchTime < 300)
+			return;
+
 		if (Game.animStartTime != null)
 			return;
 		if (dragStartPanX == null) {
@@ -895,6 +901,9 @@ window.addEventListener('DOMContentLoaded', function() {
 	hammertime.on('pinch', function(e) {
 		if (Game.animStartTime != null)
 			return;
+
+		lastPinchTime = Date.now();
+
 		if (prevPinchScale == null) {
 			prevCenterX = e.center.x;
 			prevCenterY = e.center.y;
