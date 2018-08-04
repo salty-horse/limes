@@ -268,8 +268,6 @@ let hammertime;
 let workerImage;
 let WORKER_WIDTH;
 let WORKER_HEIGHT;
-let WORKER_OUTLINE_SIDE;
-let WORKER_OUTLINE_ORIGIN;
 let WORKER_X;
 let WORKER_Y;
 
@@ -1047,10 +1045,8 @@ window.addEventListener('DOMContentLoaded', function() {
 		WORKER_HEIGHT = worker_side;
 	}
 
-	WORKER_OUTLINE_SIDE = Math.max(WORKER_WIDTH, WORKER_HEIGHT) + 8;
 	WORKER_X = Math.floor((ZONE_WIDTH - WORKER_WIDTH) / 2);
 	WORKER_Y = Math.floor((ZONE_WIDTH - WORKER_HEIGHT) / 2);
-	WORKER_OUTLINE_ORIGIN = Math.min(WORKER_X, WORKER_Y) - 4;
 
 	canvas.addEventListener('click', function(e) {
 		const rect = canvas.getBoundingClientRect();
@@ -1941,10 +1937,10 @@ function draw() {
 			ctx.lineJoin = 'round';
 			ctx.setLineDash([8, 4]);
 			ctx.strokeRect(
-				zoneOrigin.x + WORKER_OUTLINE_ORIGIN - 4,
-				zoneOrigin.y + WORKER_OUTLINE_ORIGIN - 4,
-				WORKER_OUTLINE_SIDE + 8,
-				WORKER_OUTLINE_SIDE + 8
+				zoneOrigin.x + PATH_MARGIN,
+				zoneOrigin.y + PATH_MARGIN,
+				ZONE_WIDTH - PATH_MARGIN * 2,
+				ZONE_WIDTH - PATH_MARGIN * 2
 			);
 			ctx.lineJoin = 'miter';
 
@@ -1952,10 +1948,10 @@ function draw() {
 			hitCtx.fillStyle = hitRegionColor;
 			hitCtx.lineWidth = 4;
 			hitCtx.fillRect(
-				zoneOrigin.x + WORKER_OUTLINE_ORIGIN - 4,
-				zoneOrigin.y + WORKER_OUTLINE_ORIGIN - 4,
-				WORKER_OUTLINE_SIDE + 8,
-				WORKER_OUTLINE_SIDE + 8
+				zoneOrigin.x + PATH_MARGIN,
+				zoneOrigin.y + PATH_MARGIN,
+				ZONE_WIDTH - PATH_MARGIN * 2,
+				ZONE_WIDTH - PATH_MARGIN * 2
 			);
 		}
 
