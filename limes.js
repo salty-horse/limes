@@ -669,15 +669,14 @@ let Game = {
 
 			// Analytics
 
-			ga('send', {
+			gtag('event', 'game_over', {
 			  hitType: 'event',
-			  eventCategory: 'game',
-			  eventAction: 'game_over',
-			  eventValue: this.score
+			  variants: this.variantsCode.join(''),
+			  score: this.score
 			});
 
 			if (this.sharedLink) {
-				ga('send', 'event', 'game', 'finished_shared_game');
+				gtag('event', 'finished_shared_game');
 			}
 		}
 
