@@ -889,7 +889,7 @@ window.addEventListener('DOMContentLoaded', function() {
 	hammertime = new Hammer(canvas);
 	hammertime.get('pan').set({ direction: Hammer.DIRECTION_ALL });
 	hammertime.get('pinch').set({ enable: true, direction: Hammer.DIRECTION_ALL });
-	
+
 	let dragStartPanX = null;
 	let dragStartPanY = null;
 	let prevCenterX = null;
@@ -918,7 +918,7 @@ window.addEventListener('DOMContentLoaded', function() {
 			window.requestAnimationFrame(draw);
 		}
 	});
-	
+
 	hammertime.on('panend', function(e) {
 		document.body.style.cursor = 'default';
 		dragStartPanX = null;
@@ -1767,7 +1767,7 @@ function animatePanAndZoom(timestamp) {
 	    Game.animSpeedPanX < 0 && Game.animPanX < 0 ||
 	    Game.animSpeedPanY > 0 && Game.animPanY > 0 ||
 	    Game.animSpeedPanY < 0 && Game.animPanY < 0) {
-		
+
 		Game.animScale = 0;
 		Game.animPanX = 0;
 		Game.animPanY = 0;
